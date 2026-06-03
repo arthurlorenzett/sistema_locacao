@@ -1,5 +1,12 @@
+# Ambientes Virtuais
 venv/
+.venv/
 env/
-*.pyc
-__pycache__/
+
+# Configurações locais e senhas
 .env
+
+# Arquivos do Python
+__pycache__/
+*.py[cod]
+*$py.class

@@ -1,0 +1,7 @@
+"""
+Ponto de centralização dos modelos do domínio.
+Facilita a importação em lote das tabelas pelo ecossistema do Flask e do Migrate.
+"""
+
+from app.models.usuario_model import Usuario, Locatario, Locador, Administrador
+from app.models.espacoEsportivo_model import EspacoEsportivo

@@ -1,0 +1,39 @@
+======================================================================
+     GUIA DE COMANDOS - SISTEMA DE LOCAÇÃO (BACKEND)
+======================================================================
+
+--- 1. AMBIENTE VIRTUAL (VENV) ---
+
+python -m venv venv
+-> Cria a pasta isolada (ambiente virtual) onde as bibliotecas do projeto serão instaladas.
+
+.\venv\Scripts\activate
+-> (Apenas no Windows) Ativa o ambiente virtual para o terminal começar a usar o Python do projeto.
+
+
+--- 2. GERENCIAMENTO DE BIBLIOTECAS (DEPENDÊNCIAS) ---
+
+pip freeze > requirements.txt
+-> Salva a lista com os nomes e versões de todas as bibliotecas instaladas no projeto dentro de um arquivo de texto.
+
+pip install -r requirements.txt
+-> Lê o arquivo "requirements.txt" e instala todas as bibliotecas listadas nele de uma vez só.
+
+
+--- 3. BANCO DE DADOS E MIGRAÇÕES (FLASK-MIGRATE) ---
+
+flask db init
+-> Inicializa o sistema de controle de versões do banco de dados (Alembic). Cria a pasta "migrations". Só deve ser rodado uma vez na criação do projeto.
+
+flask db migrate -m "mensagem"
+-> Compara as classes do Python com o banco de dados e gera um arquivo de "receita" (migração) com o que precisa ser criado ou alterado.
+
+flask db upgrade
+-> Aplica as receitas pendentes no banco de dados, criando ou atualizando as tabelas físicas lá no PostgreSQL de fato.
+
+
+--- 5. EXECUÇÃO ---
+
+python main.py
+-> Liga o servidor backend da aplicação (deixa a API ativa esperando conexões).
+======================================================================
