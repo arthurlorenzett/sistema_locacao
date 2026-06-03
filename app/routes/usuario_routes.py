@@ -49,8 +49,7 @@ def criar_usuario():
             "id_usuario": novo_usuario.id
         }), 201
         
-    except ValueError as erro:
-        # Se a Factory gritar que faltou CNPJ, por exemplo, cai aqui
+    except ValueError as erro: # Captura os erros de validação da Factory (ex: tipo desconhecido, falta de CPF para locatário, etc)
         return jsonify({"erro": str(erro)}), 400
     except Exception as e:
         # Prevenção extra caso o banco de dados dê algum erro (ex: email repetido)
