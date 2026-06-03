@@ -49,23 +49,3 @@ class Administrador(Usuario):
         'polymorphic_identity' : 'administrador'
     }
 
-class UsuarioFactory:
-    """Fábrica responsavel por instanciar diferentes tipos de usuários. Implementa Factory Method."""
-    
-    @staticmethod
-    def criar_usuario (tipo, nome, email, senha, **kwargs):
-        if tipo == 'locatario':
-            return Locatario(nome=nome, email=email, senha=senha)
-        
-        elif tipo == 'locador':
-            cnpj = kwargs.get('cnpj')
-            razao_social = kwargs.get('razao_social')
-            if not cnpj or not razao_social:
-                raise ValueError("Locador requer CNPJ e Rrazão Social")
-            return Locador(nome=nome, email=email, senha=senha, cnpj=cnpj, razao_social=razao_social)
-        
-        elif tipo == 'administrador':
-            return Administrador(nome=nome, email=email, senha=senha)
-        
-        else:
-            raise ValueError("Tipo de usuário '{tipo}' desconhecido")
