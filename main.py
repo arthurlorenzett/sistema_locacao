@@ -1,13 +1,13 @@
-from flask import Flask
+"""
+Ponto de entrada principal da aplicação.
+Importa a fábrica do aplicativo Flask e inicia o servidor de desenvolvimento.
+"""
 
-# Inicializa o aplicativo Flask
-app = Flask(__name__)
+from app import create_app
 
-# rotas
-@app.route('/')
-def index():
-    return "<h1>Hello, World!</h1>"
+# Cria a instância do aplicativo configurado
+app = create_app()
 
-# Executa o servidor
 if __name__ == '__main__':
+    # Roda o servidor na porta 5000 com o modo de depuração (debug) ativado
     app.run(debug=True)
