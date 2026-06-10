@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify
 
 main_bp = Blueprint('main_bp', __name__)
 
-@main_bp.route('/', methods=['GET'])
+@main_bp.route('/api/', methods=['GET'])
 def pagina_inicial():
     return jsonify({
         "status": "online",
