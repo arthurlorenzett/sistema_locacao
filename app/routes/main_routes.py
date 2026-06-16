@@ -10,6 +10,7 @@ def pagina_inicial():
         "versao": "1.0.0",
         "mensagem": "Bem-vindo ao backend do projeto! A API está operando normalmente.",
         "endpoints_disponiveis": {
+            "login": "POST /usuarios/login",
             "listar_usuarios": "GET /usuarios"
         }
     }), 200

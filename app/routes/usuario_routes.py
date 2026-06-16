@@ -1,34 +1,36 @@
-from flask import Blueprint, jsonify, request
-from app.models.usuario_model import Usuario
+from flask import Blueprint, request, jsonify
+from sqlalchemy.exc import IntegrityError # Importação nova para capturar erro de exclusão
 from app.factories.usuario_factory import UsuarioFactory
+from app.models.usuario_model import Usuario 
 from app import db
 
-""" Criando o "Blueprint" (um agrupador de rotas para organizar o projeto)"""
 usuario_bp = Blueprint('usuario_bp', __name__)
 
-@usuario_bp.route('/usuarios', methods=['GET'])
-def listar_usuarios():
-    """Rota para listar todos os usuários cadastrados."""
-    # Busca todos os usuários no banco de dados
-    usuarios = Usuario.query.all()
-    lista_usuarios = [{"id": u.id, "nome": u.nome, "tipo": u.tipo_usuario} for u in usuarios]
+@usuario_bp.route('/login', methods=['POST'], strict_slashes=False)
+def login():
+    """Autentica o usuário e devolve os dados consumidos pela sessão do frontend."""
+    dados = request.get_json(silent=True) or {}
+    email = (dados.get('email') or '').strip()
+    senha = dados.get('senha') or ''
+
+    if not email or not senha:
+        return jsonify({"erro": "Informe e-mail e senha."}), 400
+
+    usuario = Usuario.query.filter_by(email=email).first()
+    if not usuario or not usuario.autenticar(senha):
+        return jsonify({"erro": "Email ou senha inválidos."}), 401
+
     return jsonify({
-        "mensagem": "Sucesso! A rota de usuários está funcionando perfeitamente.",
-        "total_usuarios": len(usuarios),
-        "usuarios": lista_usuarios
+        "id": usuario.id,
+        "nome": usuario.nome,
+        "email": usuario.email,
+        "tipo_usuario": usuario.tipo_usuario,
     }), 200
-    
-@usuario_bp.route('/usuarios', methods=['POST'])
-def criar_usuario():
-    """Rota para cadastrar um novo usuário no sistema."""
-    # Pegando os dados que chegaram na requisição
+
+@usuario_bp.route('', methods=['POST'], strict_slashes=False)
+def cadastrar_usuario():
     dados = request.get_json()
-    
-    if not dados:
-        return jsonify({"erro": "Nenhum dado foi enviado."}), 400
-        
     try:
-        # Criando o usuário usando a Factory
         novo_usuario = UsuarioFactory.criar_usuario(
             tipo=dados.get('tipo'),
             nome=dados.get('nome'),
@@ -38,84 +40,79 @@ def criar_usuario():
             cnpj=dados.get('cnpj'),
             razao_social=dados.get('razao_social')
         )
-        
-        # Salva o objeto criado no banco de dados
         db.session.add(novo_usuario)
         db.session.commit()
-        
-        return jsonify({
-            "mensagem": f"{dados.get('tipo').capitalize()} cadastrado com sucesso!",
-            "id_usuario": novo_usuario.id
-        }), 201
-        
-    except ValueError as erro: # Captura os erros de validação da Factory (ex: tipo desconhecido, falta de CPF para locatário, etc)
-        return jsonify({"erro": str(erro)}), 400
+        return jsonify({"mensagem": f"Usuário '{dados.get('nome')}' cadastrado com sucesso!"}), 201
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
     except Exception as e:
-        # Prevenção extra caso o banco de dados dê algum erro (ex: email repetido)
-        db.session.rollback() 
-        return jsonify({"erro": "Erro ao salvar no banco de dados.", "detalhes": str(e)}), 500
+        db.session.rollback()
+        return jsonify({"erro": "Erro interno no servidor."}), 500
 
-@usuario_bp.route('/usuarios/<int:id>', methods=['GET'])
-def obter_usuario(id):
-    """Rota para obter os detalhes de um usuário específico pelo ID."""
-    usuario  = Usuario.query.get(id) # Faz basicamente um select * from usuarios where id = id
-    if not usuario: # se não existir um usuário com esse ID, retorna um erro 404
+@usuario_bp.route('', methods=['GET'], strict_slashes=False)
+def listar_usuarios():
+    usuarios = Usuario.query.all()
+    lista = []
+    for u in usuarios:
+        lista.append({
+            "id": u.id,
+            "nome": u.nome,
+            "email": u.email,
+            "tipo": u.tipo_usuario
+        })
+    return jsonify({"usuarios": lista, "total_usuarios": len(lista)}), 200
+
+@usuario_bp.route('/<int:id>', methods=['GET'])
+def detalhar_usuario(id):
+    usuario = Usuario.query.get(id)
+    if not usuario:
         return jsonify({"erro": "Usuário não encontrado."}), 404
-
-    dados_usuario = {
+        
+    dados = {
         "id": usuario.id,
         "nome": usuario.nome,
         "email": usuario.email,
         "tipo": usuario.tipo_usuario
-        }
+    }
     
-    # Adiciona os campos específicos de cada tipo de usuário
     if usuario.tipo_usuario == 'locatario':
-        dados_usuario["cpf"] = getattr(usuario, 'cpf', None)
+        dados['cpf'] = usuario.cpf
     elif usuario.tipo_usuario == 'locador':
-        dados_usuario["cnpj"] = getattr(usuario, 'cnpj', None)
-        dados_usuario["razao_social"] = getattr(usuario, 'razao_social', None)
+        dados['cnpj'] = usuario.cnpj
+        dados['razao_social'] = usuario.razao_social
+        
+    return jsonify(dados), 200
 
-    return jsonify(dados_usuario), 200
-
-@usuario_bp.route('/usuarios/<int:id>', methods=['PUT'])
-def atualizar_usuario(id):
-    """Rota para atualizar os dados de um usuário existente."""
+@usuario_bp.route('/<int:id>', methods=['PUT'])
+def editar_usuario(id):
     usuario = Usuario.query.get(id)
-    
     if not usuario:
         return jsonify({"erro": "Usuário não encontrado."}), 404
-
+        
     dados = request.get_json()
-
-    # Atualiza apenas os campos que o front-end enviou no JSON
     if 'nome' in dados:
         usuario.nome = dados['nome']
     if 'email' in dados:
         usuario.email = dados['email']
     if 'senha' in dados:
         usuario.senha = dados['senha']
+        
+    db.session.commit()
+    return jsonify({"mensagem": "Usuário atualizado com sucesso!"}), 200
 
-    try:
-        db.session.commit()
-        return jsonify({"mensagem": "Usuário atualizado com sucesso!"}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"erro": "Erro ao atualizar no banco.", "detalhes": str(e)}), 500
-
-
-@usuario_bp.route('/usuarios/<int:id>', methods=['DELETE'])
+@usuario_bp.route('/<int:id>', methods=['DELETE'])
 def deletar_usuario(id):
-    """Rota para excluir um usuário do sistema."""
     usuario = Usuario.query.get(id)
-    
     if not usuario:
         return jsonify({"erro": "Usuário não encontrado."}), 404
-
+        
     try:
         db.session.delete(usuario)
         db.session.commit()
-        return jsonify({"mensagem": "Usuário excluído com sucesso!"}), 200
-    except Exception as e:
+        return jsonify({"mensagem": "Usuário deletado."}), 200
+    except IntegrityError:
+        # Se o banco chiar porque o usuário tem quadras ou reservas, cai aqui!
         db.session.rollback()
-        return jsonify({"erro": "Erro ao excluir. O usuário pode ter dependências.", "detalhes": str(e)}), 500
+        return jsonify({
+            "erro": "Não é possível excluir este usuário pois ele possui reservas ou espaços esportivos vinculados."
+        }), 409 # 409 Conflict
