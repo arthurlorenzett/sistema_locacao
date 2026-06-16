@@ -581,4 +581,12 @@ def main(page: ft.Page):
     navegar(0)
 
 
-ft.run(main)
+if __name__ == "__main__":
+    import os
+    
+    # O Render injeta automaticamente uma variável de ambiente chamada PORT.
+    # Se estiver a rodar localmente no seu PC, ele usará a porta padrão 8000.
+    porta = int(os.environ.get("PORT", 8000))
+    
+    # Inicializa o Flet configurado para a Web na porta correta
+    ft.app(target=main, host="0.0.0.0", port=porta)
