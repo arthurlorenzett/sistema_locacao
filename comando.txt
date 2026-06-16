@@ -36,4 +36,7 @@ flask db upgrade
 
 python main.py
 -> Liga o servidor backend da aplicação (deixa a API ativa esperando conexões).
+
+python gui_flet.py
+-> Liga a interface gráfica
 ======================================================================
