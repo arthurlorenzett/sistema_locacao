@@ -4,4 +4,4 @@ Facilita a importação em lote das tabelas pelo ecossistema do Flask e do Migra
 """
 
 from app.models.usuario_model import Usuario, Locatario, Locador, Administrador
-from app.models.espacoEsportivo_model import EspacoEsportivo
+from app.models.espaco_esportivo_model import EspacoEsportivo
