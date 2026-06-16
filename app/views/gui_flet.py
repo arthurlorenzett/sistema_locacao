@@ -20,7 +20,13 @@ API_BASE = "http://localhost:5000"
 def api_get(path):
     try:
         r = requests.get(f"{API_BASE}{path}", timeout=5)
-        return r.json(), r.status_code
+        # Tenta ler como JSON
+        try:
+            return r.json(), r.status_code
+        except ValueError:
+            # Se não for JSON (for HTML de erro, por exemplo), cai aqui e não quebra o app
+            return {"erro": f"Erro inesperado no servidor. Status: {r.status_code}"}, r.status_code
+            
     except requests.exceptions.ConnectionError:
         return {"erro": "Não foi possível conectar à API. Verifique se o backend está rodando."}, 0
 

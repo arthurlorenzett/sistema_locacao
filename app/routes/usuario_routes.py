@@ -1,13 +1,13 @@
 from flask import Blueprint, request, jsonify
+from sqlalchemy.exc import IntegrityError # Importação nova para capturar erro de exclusão
 from app.factories.usuario_factory import UsuarioFactory
-from app.models.usuario_model import Usuario # Importando a classe mãe
+from app.models.usuario_model import Usuario 
 from app import db
 
 usuario_bp = Blueprint('usuario_bp', __name__)
 
-@usuario_bp.route('/', methods=['POST'])
+@usuario_bp.route('', methods=['POST'], strict_slashes=False)
 def cadastrar_usuario():
-    """Cria um novo usuário (usado pela tela_cadastro do Flet)"""
     dados = request.get_json()
     try:
         novo_usuario = UsuarioFactory.criar_usuario(
@@ -28,9 +28,8 @@ def cadastrar_usuario():
         db.session.rollback()
         return jsonify({"erro": "Erro interno no servidor."}), 500
 
-@usuario_bp.route('/', methods=['GET'])
+@usuario_bp.route('', methods=['GET'], strict_slashes=False)
 def listar_usuarios():
-    """Lista todos os usuários (usado pela tela_usuarios do Flet)"""
     usuarios = Usuario.query.all()
     lista = []
     for u in usuarios:
@@ -44,7 +43,6 @@ def listar_usuarios():
 
 @usuario_bp.route('/<int:id>', methods=['GET'])
 def detalhar_usuario(id):
-    """Busca os detalhes completos de um usuário específico"""
     usuario = Usuario.query.get(id)
     if not usuario:
         return jsonify({"erro": "Usuário não encontrado."}), 404
@@ -56,7 +54,6 @@ def detalhar_usuario(id):
         "tipo": usuario.tipo_usuario
     }
     
-    # Adiciona os campos específicos dependendo do tipo usando o Polimorfismo
     if usuario.tipo_usuario == 'locatario':
         dados['cpf'] = usuario.cpf
     elif usuario.tipo_usuario == 'locador':
@@ -67,7 +64,6 @@ def detalhar_usuario(id):
 
 @usuario_bp.route('/<int:id>', methods=['PUT'])
 def editar_usuario(id):
-    """Atualiza um usuário existente (usado pela tela_editar do Flet)"""
     usuario = Usuario.query.get(id)
     if not usuario:
         return jsonify({"erro": "Usuário não encontrado."}), 404
@@ -85,11 +81,17 @@ def editar_usuario(id):
 
 @usuario_bp.route('/<int:id>', methods=['DELETE'])
 def deletar_usuario(id):
-    """Deleta um usuário (usado pelo botão de lixeira no Flet)"""
     usuario = Usuario.query.get(id)
     if not usuario:
         return jsonify({"erro": "Usuário não encontrado."}), 404
         
-    db.session.delete(usuario)
-    db.session.commit()
-    return jsonify({"mensagem": "Usuário deletado."}), 200
+    try:
+        db.session.delete(usuario)
+        db.session.commit()
+        return jsonify({"mensagem": "Usuário deletado."}), 200
+    except IntegrityError:
+        # Se o banco chiar porque o usuário tem quadras ou reservas, cai aqui!
+        db.session.rollback()
+        return jsonify({
+            "erro": "Não é possível excluir este usuário pois ele possui reservas ou espaços esportivos vinculados."
+        }), 409 # 409 Conflict

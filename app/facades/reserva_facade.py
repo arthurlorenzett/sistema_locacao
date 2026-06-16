@@ -1,5 +1,5 @@
 from app.models.reserva_model import Reserva
-from app.models.espacoEsportivo_model import EspacoEsportivo
+from app.models.espaco_esportivo_model import EspacoEsportivo
 from app import db
 
 class ReservaFacade:

@@ -1,7 +1,3 @@
-"""
-Módulo de definição da entidade EspacoEsportivo no banco de dados.
-"""
-
 from app import db
 
 class EspacoEsportivo(db.Model):

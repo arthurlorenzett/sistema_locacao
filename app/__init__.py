@@ -34,7 +34,7 @@ def create_app():
     app.register_blueprint(main_bp) 
 
     # Registra os Blueprints no sistema, definindo prefixos claros nas URLs
-    app.register_blueprint(usuario_bp, url_prefix='/api/usuarios')
-    app.register_blueprint(reserva_bp, url_prefix='/api/reservas')
+    app.register_blueprint(usuario_bp, url_prefix='/usuarios')
+    app.register_blueprint(reserva_bp, url_prefix='/reservas')
 
     return app
