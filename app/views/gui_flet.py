@@ -14,7 +14,7 @@ from datetime import datetime
 # ─────────────────────────────────────────
 # CONFIGURAÇÃO
 # ─────────────────────────────────────────
-API_BASE = "http://localhost:5000"
+API_BASE = "https://sistema-locacao-715o.onrender.com"
 
 
 def api_get(path):
