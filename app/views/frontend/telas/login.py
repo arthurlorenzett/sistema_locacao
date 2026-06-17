@@ -64,6 +64,6 @@ def tela_login(page: ft.Page, on_sucesso):
         ),
         expand=True,
         bgcolor=COR_FUNDO,
-        alignment=ft.alignment.center,
+        alignment=ft.alignment.Alignment(0, 0),
         padding=24,
     )
