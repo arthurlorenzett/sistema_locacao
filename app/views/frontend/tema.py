@@ -35,8 +35,7 @@ def aplicar_tema(page: ft.Page):
         color_scheme=ft.ColorScheme(
             primary=COR_PRIMARIA,
             secondary=COR_VERDE,
-            background=COR_FUNDO,
-            surface=COR_CARD,
+            surface=COR_FUNDO,
             on_surface=COR_TEXTO,
         ),
     )
