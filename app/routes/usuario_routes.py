@@ -6,6 +6,27 @@ from app import db
 
 usuario_bp = Blueprint('usuario_bp', __name__)
 
+@usuario_bp.route('/login', methods=['POST'], strict_slashes=False)
+def login():
+    """Autentica o usuário e devolve os dados consumidos pela sessão do frontend."""
+    dados = request.get_json(silent=True) or {}
+    email = (dados.get('email') or '').strip()
+    senha = dados.get('senha') or ''
+
+    if not email or not senha:
+        return jsonify({"erro": "Informe e-mail e senha."}), 400
+
+    usuario = Usuario.query.filter_by(email=email).first()
+    if not usuario or not usuario.autenticar(senha):
+        return jsonify({"erro": "Email ou senha inválidos."}), 401
+
+    return jsonify({
+        "id": usuario.id,
+        "nome": usuario.nome,
+        "email": usuario.email,
+        "tipo_usuario": usuario.tipo_usuario,
+    }), 200
+
 @usuario_bp.route('', methods=['POST'], strict_slashes=False)
 def cadastrar_usuario():
     dados = request.get_json()
