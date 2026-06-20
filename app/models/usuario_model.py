@@ -1,4 +1,5 @@
 from app import db
+from werkzeug.security import check_password_hash
 
 class Usuario(db.Model):
     """Classe abstrata para representar um usuário do sistema."""
@@ -15,10 +16,8 @@ class Usuario(db.Model):
     }
     
     def autenticar(self, senha_informada):
-        if self.senha == senha_informada:
-            return True
-        return False
-    
+        return check_password_hash(self.senha, senha_informada)
+
 class Locatario(Usuario):
     """Classe herdada de usuario para representar um locatario/cliente do sistema."""
     __tablename__ = 'locatarios'

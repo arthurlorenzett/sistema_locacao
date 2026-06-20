@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from sqlalchemy.exc import IntegrityError # Importação nova para capturar erro de exclusão
+from werkzeug.security import generate_password_hash
 from app.factories.usuario_factory import UsuarioFactory
 from app.models.usuario_model import Usuario 
 from app import db
@@ -31,11 +32,12 @@ def login():
 def cadastrar_usuario():
     dados = request.get_json()
     try:
-        novo_usuario = UsuarioFactory.criar_usuario(
+        senha_criptografada = generate_password_hash(dados.get('senha')) #transforma a senha em hash
+        novo_usuario = UsuarioFactory.criar_usuario( # Implementação da factory para criar o usuário
             tipo=dados.get('tipo'),
             nome=dados.get('nome'),
             email=dados.get('email'),
-            senha=dados.get('senha'),
+            senha=senha_criptografada, #envia a senha já criptografada para o modelo
             cpf=dados.get('cpf'),
             cnpj=dados.get('cnpj'),
             razao_social=dados.get('razao_social')
@@ -95,7 +97,7 @@ def editar_usuario(id):
     if 'email' in dados:
         usuario.email = dados['email']
     if 'senha' in dados:
-        usuario.senha = dados['senha']
+        usuario.senha = generate_password_hash(dados['senha'])
         
     db.session.commit()
     return jsonify({"mensagem": "Usuário atualizado com sucesso!"}), 200
