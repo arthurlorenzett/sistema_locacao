@@ -5,23 +5,30 @@ class UsuarioFactory:
     
     @staticmethod
     def criar_usuario(tipo, nome, email, senha, **kwargs):
+        if not nome or not email or not senha:
+            raise ValueError("Nome, e-mail e senha são obrigatórios.")
+
         if tipo == 'locatario':
             cpf = kwargs.get('cpf') # Obtém o CPF dos argumentos adicionais
             if not cpf:
                 raise ValueError("Locatário requer CPF.")
-            return Locatario(nome=nome, email=email, senha=senha, cpf=cpf)
-        
+            usuario = Locatario(nome=nome, email=email, cpf=cpf)
+
         elif tipo == 'locador':
             cnpj = kwargs.get('cnpj')
             razao_social = kwargs.get('razao_social')
-            
+
             if not cnpj or not razao_social:
                 raise ValueError("Locador requer CNPJ e Razão Social.")
-                
-            return Locador(nome=nome, email=email, senha=senha, cnpj=cnpj, razao_social=razao_social)
-        
+
+            usuario = Locador(nome=nome, email=email, cnpj=cnpj, razao_social=razao_social)
+
         elif tipo == 'administrador':
-            return Administrador(nome=nome, email=email, senha=senha)
-        
+            usuario = Administrador(nome=nome, email=email)
+
         else:
             raise ValueError(f"Tipo de usuário '{tipo}' desconhecido.")
+
+        # Senha sempre armazenada como hash (nunca em texto puro).
+        usuario.definir_senha(senha)
+        return usuario

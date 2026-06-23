@@ -1,64 +1,116 @@
+"""Fachada das operações de reserva.
+
+Único ponto de contato das rotas com a lógica de agendamento: validação de
+disponibilidade, conflito de horário, reserva duplicada, pagamento (simulado)
+e cancelamento — sempre via o padrão State da `Reserva`.
+"""
+
+from datetime import timedelta
+
 from app.models.reserva_model import Reserva
 from app.models.espaco_esportivo_model import EspacoEsportivo
+from app.services import validacao
 from app import db
 
+# Duração padrão de uma reserva quando não há data_fim explícita.
+_SLOT_PADRAO = timedelta(hours=1)
+
+
 class ReservaFacade:
-    """
-    Fachada para simplificar as operações complexas de agendamento.
-    Serve como único ponto de contato para o frontend/rotas.
-    """
-    
+
     @staticmethod
-    def realizar_reserva(locatario_id, espaco_id, data_horario):
-        # 1. Verifica se o espaço existe e está disponível
+    def _ha_sobreposicao(espaco_id, inicio, fim, ignorar_id=None) -> bool:
+        """Detecta choque de horário com reservas confirmadas (intervalos abertos à direita)."""
+        confirmadas = Reserva.query.filter_by(espaco_id=espaco_id, status_texto="Confirmada").all()
+        for r in confirmadas:
+            if ignorar_id and r.id == ignorar_id:
+                continue
+            r_fim = r.data_fim or (r.data_horario + _SLOT_PADRAO)
+            if inicio < r_fim and r.data_horario < fim:
+                return True
+        return False
+
+    @staticmethod
+    def realizar_reserva(locatario_id, espaco_id, data_horario, data_fim=None):
+        if not locatario_id or not espaco_id:
+            raise ValueError("Locatário e espaço são obrigatórios.")
+
+        inicio = validacao.validar_data_horario_futuro(data_horario)
+        fim = validacao.parse_datetime(data_fim) if data_fim else inicio + _SLOT_PADRAO
+        if fim <= inicio:
+            raise ValueError("O horário de término deve ser depois do início.")
+
         espaco = EspacoEsportivo.query.get(espaco_id)
-        if not espaco or not espaco.disponivel:
+        if not espaco or not espaco.ativo or not espaco.disponivel:
             raise ValueError("Espaço esportivo não encontrado ou indisponível.")
-            
-        # 2. Verifica choque de horários (simplificado para o exemplo)
-        reserva_existente = Reserva.query.filter_by(
-            espaco_id=espaco_id, 
-            data_horario=data_horario,
-            status_texto="Confirmada"
+
+        # Reserva duplicada (mesmo cliente, espaço e horário ainda ativa).
+        duplicada = Reserva.query.filter(
+            Reserva.locatario_id == locatario_id,
+            Reserva.espaco_id == espaco_id,
+            Reserva.data_horario == inicio,
+            Reserva.status_texto.in_(("Pendente", "Confirmada")),
         ).first()
-        
-        if reserva_existente:
+        if duplicada:
+            raise ValueError("Você já possui uma reserva para este espaço neste horário.")
+
+        # Conflito com reserva confirmada de qualquer cliente.
+        if ReservaFacade._ha_sobreposicao(espaco_id, inicio, fim):
             raise ValueError("Já existe uma reserva confirmada para este horário.")
-            
-        # 3. Cria a nova reserva (Nasce com o status 'Pendente' via padrão State)
+
         nova_reserva = Reserva(
             locatario_id=locatario_id,
             espaco_id=espaco_id,
-            data_horario=data_horario
+            data_horario=inicio,
+            data_fim=fim,
         )
-        
-        # 4. Salva no banco de dados PostgreSQL
         db.session.add(nova_reserva)
         db.session.commit()
-        
         return nova_reserva
 
     @staticmethod
     def confirmar_pagamento_e_reserva(reserva_id, metodo_pagamento):
-        """
-        O sistema registrará a intenção de pagamento e o método escolhido, mudando 
-        o status da reserva no banco de dados.
-        """
+        """Confirma a reserva registrando o método de pagamento (simulado)."""
         reserva = Reserva.query.get(reserva_id)
         if not reserva:
             raise ValueError("Reserva não encontrada.")
-            
+
+        metodo = (metodo_pagamento or "").strip().lower()
+        if metodo not in ("online", "presencial"):
+            raise ValueError("Método de pagamento inválido (use 'online' ou 'presencial').")
+
+        espaco = EspacoEsportivo.query.get(reserva.espaco_id)
+        if espaco:
+            if metodo == "online" and not espaco.aceita_online:
+                raise ValueError("Este espaço não aceita pagamento online.")
+            if metodo == "presencial" and not espaco.aceita_presencial:
+                raise ValueError("Este espaço não aceita pagamento presencial.")
+
+        # Reconfere conflito no momento da confirmação.
+        fim = reserva.data_fim or (reserva.data_horario + _SLOT_PADRAO)
+        if ReservaFacade._ha_sobreposicao(reserva.espaco_id, reserva.data_horario, fim,
+                                          ignorar_id=reserva.id):
+            raise ValueError("Horário já foi confirmado por outra reserva.")
+
         try:
-            # O padrão State garante que a transição ocorra corretamente
-            mensagem = reserva.confirmar_reserva() 
-            
-            # Registra como foi pago (texto simples para prestação de contas)
-            registro_pagamento = f"Pago via {metodo_pagamento}" 
-            
+            mensagem = reserva.confirmar_reserva()  # padrão State
+            reserva.metodo_pagamento = metodo
+            reserva.status_pagamento = "Pago" if metodo == "online" else "Presencial"
             db.session.commit()
-            return f"{mensagem} {registro_pagamento}"
-            
-        except ValueError as e:
-            # Captura erros do Padrão State (ex: tentar confirmar algo já cancelado)
+            return mensagem
+        except ValueError:
             db.session.rollback()
-            raise e
+            raise
+
+    @staticmethod
+    def cancelar_reserva(reserva_id):
+        reserva = Reserva.query.get(reserva_id)
+        if not reserva:
+            raise ValueError("Reserva não encontrada.")
+        try:
+            mensagem = reserva.cancelar_reserva()  # padrão State
+            db.session.commit()
+            return mensagem
+        except ValueError:
+            db.session.rollback()
+            raise
