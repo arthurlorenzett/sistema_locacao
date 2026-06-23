@@ -18,8 +18,12 @@ class Config:
     """
     
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL')
-    
+
     if not SQLALCHEMY_DATABASE_URI:
         raise ValueError("A variável DATABASE_URL não foi encontrada. Verifique seu arquivo .env!")
 
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Chave usada para assinar os tokens de autenticação (itsdangerous).
+    # Em produção deve vir do ambiente; o fallback serve apenas para dev local.
+    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-arena-facil-troque-em-producao')

@@ -28,13 +28,35 @@ def create_app():
     # Importa os Blueprints
     from app.routes.usuario_routes import usuario_bp
     from app.routes.reserva_routes import reserva_bp
-    
+    from app.routes.espaco_routes import espaco_bp
+
     # (Opcional) Importa o main_bp se você for criar uma rota raiz ('/')
-    from app.routes.main_routes import main_bp 
-    app.register_blueprint(main_bp) 
+    from app.routes.main_routes import main_bp
+    app.register_blueprint(main_bp)
 
     # Registra os Blueprints no sistema, definindo prefixos claros nas URLs
     app.register_blueprint(usuario_bp, url_prefix='/usuarios')
     app.register_blueprint(reserva_bp, url_prefix='/reservas')
+    app.register_blueprint(espaco_bp, url_prefix='/espacos')
+
+    _registrar_handlers_erro(app)
 
     return app
+
+
+def _registrar_handlers_erro(app):
+    """Garante respostas JSON (nunca HTML/stacktrace) para erros comuns."""
+    from flask import jsonify
+
+    @app.errorhandler(404)
+    def _nao_encontrado(_e):
+        return jsonify({"erro": "Recurso não encontrado."}), 404
+
+    @app.errorhandler(405)
+    def _metodo_invalido(_e):
+        return jsonify({"erro": "Método não permitido."}), 405
+
+    @app.errorhandler(500)
+    def _erro_interno(_e):
+        db.session.rollback()
+        return jsonify({"erro": "Erro interno no servidor."}), 500
