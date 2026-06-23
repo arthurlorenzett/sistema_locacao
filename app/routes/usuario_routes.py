@@ -1,10 +1,36 @@
 from flask import Blueprint, request, jsonify
 from sqlalchemy.exc import IntegrityError # Importação nova para capturar erro de exclusão
 from app.factories.usuario_factory import UsuarioFactory
-from app.models.usuario_model import Usuario 
+from app.models.usuario_model import Usuario
+from app.auth.seguranca import gerar_token
 from app import db
 
 usuario_bp = Blueprint('usuario_bp', __name__)
+
+@usuario_bp.route('/login', methods=['POST'], strict_slashes=False)
+def login():
+    """Autentica o usuário e devolve os dados consumidos pela sessão do frontend."""
+    dados = request.get_json(silent=True) or {}
+    email = (dados.get('email') or '').strip()
+    senha = dados.get('senha') or ''
+
+    if not email or not senha:
+        return jsonify({"erro": "Informe e-mail e senha."}), 400
+
+    usuario = Usuario.query.filter_by(email=email).first()
+    if not usuario or not usuario.autenticar(senha):
+        return jsonify({"erro": "Email ou senha inválidos."}), 401
+
+    if not getattr(usuario, "ativo", True):
+        return jsonify({"erro": "Usuário bloqueado. Procure o administrador."}), 403
+
+    return jsonify({
+        "id": usuario.id,
+        "nome": usuario.nome,
+        "email": usuario.email,
+        "tipo_usuario": usuario.tipo_usuario,
+        "token": gerar_token(usuario),
+    }), 200
 
 @usuario_bp.route('', methods=['POST'], strict_slashes=False)
 def cadastrar_usuario():
@@ -73,9 +99,9 @@ def editar_usuario(id):
         usuario.nome = dados['nome']
     if 'email' in dados:
         usuario.email = dados['email']
-    if 'senha' in dados:
-        usuario.senha = dados['senha']
-        
+    if dados.get('senha'):
+        usuario.definir_senha(dados['senha'])
+
     db.session.commit()
     return jsonify({"mensagem": "Usuário atualizado com sucesso!"}), 200
 
