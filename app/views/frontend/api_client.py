@@ -15,7 +15,7 @@ import requests
 
 from frontend.config import API_BASE
 
-TIMEOUT = 8
+TIMEOUT = 60
 
 # Token de autenticação atual (definido após o login).
 _TOKEN = None
