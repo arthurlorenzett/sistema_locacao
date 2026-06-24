@@ -7,7 +7,4 @@ para o backend hospedado no Render.
 
 import os
 
-API_BASE = os.environ.get(
-    "API_BASE",
-    "https://sistema-locacao-715o.onrender.com",
-)
+API_BASE = os.environ.get("API_BASE", "http://localhost:5000")

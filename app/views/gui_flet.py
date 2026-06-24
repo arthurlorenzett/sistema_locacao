@@ -26,4 +26,4 @@ from frontend.app import main
 if __name__ == "__main__":
     # O Render injeta a porta via variável de ambiente PORT; localmente usa 8000.
     porta = int(os.environ.get("PORT", 8000))
-    ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=porta)
+    ft.run(main)

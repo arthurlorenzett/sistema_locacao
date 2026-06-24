@@ -23,7 +23,7 @@ def view_detalhe(page: ft.Page, espaco: dict, on_voltar, on_reservar):
 
     if espaco.get("foto_url"):
         topo = ft.Container(
-            content=ft.Image(src=espaco["foto_url"], fit=ft.ImageFit.COVER, expand=True),
+            content=ft.Image(src=espaco["foto_url"], fit="cover", expand=True),
             height=220, border_radius=14, clip_behavior=ft.ClipBehavior.ANTI_ALIAS)
     else:
         topo = ft.Container(

@@ -215,9 +215,14 @@ def card_espaco(espaco, on_reservar=None, on_detalhe=None, on_favoritar=None,
     # Topo: imagem ou ícone da modalidade + badge.
     if espaco.get("foto_url"):
         topo_visual = ft.Container(
-            content=ft.Image(src=espaco["foto_url"], fit=ft.ImageFit.COVER, expand=True),
+            content=ft.Image(src=espaco["foto_url"], fit="cover", expand=True),
             height=140, clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            border_radius=ft.border_radius.only(top_left=14, top_right=14))
+            border_radius=ft.BorderRadius(
+                top_left=14, top_right=14,
+                bottom_left=0,
+                bottom_right=0,
+            )
+    )
     else:
         topo_visual = ft.Container(
             content=ft.Icon(icone_modalidade(modalidade), size=54, color="white"),
