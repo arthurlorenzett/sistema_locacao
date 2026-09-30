@@ -32,11 +32,33 @@ flask db upgrade
 -> Aplica as receitas pendentes no banco de dados, criando ou atualizando as tabelas físicas lá no PostgreSQL de fato.
 
 
+--- 4. CONFIGURAÇÃO (.env) ---
+
+copy .env.example .env
+-> Cria o arquivo .env local (ele NÃO vai para o git). Preencha DATABASE_URL e SECRET_KEY.
+
+flask --app main criar-admin
+-> Cria o primeiro usuário administrador (pede nome, e-mail e senha).
+
+
 --- 5. EXECUÇÃO ---
 
 python main.py
--> Liga o servidor backend da aplicação (deixa a API ativa esperando conexões).
+-> Liga o servidor backend (API em http://localhost:5000). Aplica as migrations automaticamente.
 
-python gui_flet.py
--> Liga a interface gráfica
+$env:API_BASE="http://localhost:5000"; python app/views/gui_flet.py
+-> Liga a interface web (Flet) em http://localhost:8000, apontando para o backend local.
+   Sem API_BASE, o frontend usa o backend hospedado no Render.
+
+python -m pytest
+-> Roda os testes automatizados.
+
+
+--- 6. DEPLOY NO RENDER ---
+
+O arquivo render.yaml descreve os dois serviços (API Flask + frontend Flet).
+Render > New > Blueprint > escolha o repositório, e preencha:
+  - arena-facil-api: DATABASE_URL (PostgreSQL, ex.: Supabase)
+  - arena-facil-web: API_BASE = URL pública da API (ex.: https://arena-facil-api.onrender.com)
+No plano free os serviços "dormem" após 15 min sem uso; o primeiro acesso leva ~1 min.
 ======================================================================
