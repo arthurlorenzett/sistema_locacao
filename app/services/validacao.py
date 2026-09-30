@@ -87,6 +87,48 @@ def validar_data_horario_futuro(valor) -> datetime:
     return quando
 
 
+def parse_hora(texto) -> int:
+    """Converte "HH:MM" (00:00 a 24:00) em minutos desde a meia-noite."""
+    try:
+        horas, minutos = (int(p) for p in str(texto).strip().split(":"))
+    except (TypeError, ValueError):
+        raise ValueError(f"Horário inválido: {texto!r} (use HH:MM).")
+    total = horas * 60 + minutos
+    if not (0 <= horas <= 24 and 0 <= minutos < 60 and total <= 24 * 60):
+        raise ValueError(f"Horário inválido: {texto!r} (use HH:MM).")
+    return total
+
+
+def formatar_hora(minutos: int) -> str:
+    return f"{minutos // 60:02d}:{minutos % 60:02d}"
+
+
+def validar_horarios(horarios) -> list:
+    """Valida a grade semanal de funcionamento.
+
+    Recebe `[{"dia_semana": 0-6, "abre": "HH:MM", "fecha": "HH:MM"}, ...]`
+    (0 = segunda) e devolve `[(dia, abertura_min, fechamento_min), ...]`.
+    """
+    if not isinstance(horarios, list) or not horarios:
+        raise ValueError("Informe ao menos um dia de funcionamento.")
+    resultado, dias = [], set()
+    for h in horarios:
+        try:
+            dia = int(h.get("dia_semana"))
+        except (AttributeError, TypeError, ValueError):
+            raise ValueError("Dia da semana inválido.")
+        if not 0 <= dia <= 6:
+            raise ValueError("Dia da semana inválido.")
+        if dia in dias:
+            raise ValueError("Cada dia da semana só pode ter um horário.")
+        abre, fecha = parse_hora(h.get("abre")), parse_hora(h.get("fecha"))
+        if fecha <= abre:
+            raise ValueError("O horário de fechamento deve ser depois da abertura.")
+        dias.add(dia)
+        resultado.append((dia, abre, fecha))
+    return sorted(resultado)
+
+
 def faixa_preco(preco_min, preco_max):
     """Normaliza filtros de faixa de preço (qualquer um pode ser None)."""
     def _num(v):

@@ -43,6 +43,9 @@ class ReservaFacade:
         espaco = EspacoEsportivo.query.get(espaco_id)
         if not espaco or not espaco.ativo or not espaco.disponivel:
             raise ValueError("Espaço esportivo não encontrado ou indisponível.")
+        if not espaco.atende(inicio, fim):
+            raise ValueError("Este espaço não atende neste horário. "
+                             + espaco.descricao_funcionamento(inicio.weekday()))
 
         # Reserva duplicada (mesmo cliente, espaço e horário ainda ativa).
         duplicada = Reserva.query.filter(

@@ -16,6 +16,9 @@ from frontend.tema import (
 from frontend.telas.locatario import _card_reserva
 
 _MODALIDADES = ["Futebol", "Futsal", "Tênis", "Vôlei", "Basquete", "Beach Tênis"]
+_DIAS = ("Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo")
+# Opções de horário de 30 em 30 minutos, de 00:00 até 24:00 (meia-noite).
+_HORAS = [f"{m // 60:02d}:{m % 60:02d}" for m in range(0, 24 * 60 + 1, 30)]
 
 
 def tela_meus_espacos(page: ft.Page):
@@ -79,10 +82,16 @@ def _form_espaco(page, espaco, on_voltar, ao_salvar):
     f_descricao = campo("Descrição", width=320, value=e.get("descricao") or "")
     c_online = ft.Checkbox(label="Aceita pagamento online", value=e.get("aceita_online", True))
     c_presencial = ft.Checkbox(label="Aceita pagamento presencial", value=e.get("aceita_presencial", True))
+    editor_horarios, coletar_horarios = _editor_horarios(page, e.get("horarios"))
 
     def salvar(_):
         if not (f_nome.value or "").strip() or not f_modalidade.value:
             snack(page, "Nome e modalidade são obrigatórios.", COR_AVISO)
+            return
+        try:
+            horarios = coletar_horarios()
+        except ValueError as erro:
+            snack(page, str(erro), COR_AVISO)
             return
         payload = {
             "nome": f_nome.value.strip(),
@@ -95,6 +104,7 @@ def _form_espaco(page, espaco, on_voltar, ao_salvar):
             "descricao": (f_descricao.value or "").strip(),
             "aceita_online": c_online.value,
             "aceita_presencial": c_presencial.value,
+            "horarios": horarios,
         }
         if edicao:
             dados, code = api_editar_espaco(e["id"], payload)
@@ -123,10 +133,75 @@ def _form_espaco(page, espaco, on_voltar, ao_salvar):
                 ft.Container(f_descricao, col={"sm": 12, "md": 6}),
             ], spacing=10, run_spacing=10),
             ft.Row([c_online, c_presencial], spacing=20),
+            ft.Divider(height=16),
+            editor_horarios,
             ft.ElevatedButton("Salvar", icon=ft.Icons.SAVE, on_click=salvar,
                               bgcolor=COR_PRIMARIA, color="white", height=44),
         ], spacing=12)),
     ], spacing=8, scroll=ft.ScrollMode.AUTO)
+
+
+def _editor_horarios(page, horarios):
+    """Grade semanal editável: um dia por linha (marcar = aberto) com abertura e fechamento.
+
+    Devolve (controle, coletar); `coletar()` devolve a lista no formato da API ou
+    levanta ValueError com uma mensagem para o usuário.
+    """
+    existentes = {h["dia_semana"]: h for h in (horarios or [])}
+    linhas = []  # (checkbox, dropdown_abre, dropdown_fecha)
+
+    def _dropdown(valor, desabilitado):
+        return ft.Dropdown(value=valor, width=110, dense=True, menu_height=300, disabled=desabilitado,
+                           options=[ft.dropdown.Option(h) for h in _HORAS])
+
+    def _ao_marcar(abre, fecha):
+        def handler(ev):
+            abre.disabled = fecha.disabled = not ev.control.value
+            page.update()
+        return handler
+
+    for dia, nome in enumerate(_DIAS):
+        h = existentes.get(dia)
+        # Espaço sem grade (novo ou antigo): sugere todos os dias abertos das 08:00 às 22:00.
+        aberto = bool(h) if existentes else True
+        abre = _dropdown(h["abre"] if h else "08:00", not aberto)
+        fecha = _dropdown(h["fecha"] if h else "22:00", not aberto)
+        chk = ft.Checkbox(label=nome, value=aberto, width=120, on_change=_ao_marcar(abre, fecha))
+        linhas.append((chk, abre, fecha))
+
+    def repetir_segunda(_):
+        _, abre_seg, fecha_seg = linhas[0]
+        for chk, abre, fecha in linhas[1:]:
+            if chk.value:
+                abre.value, fecha.value = abre_seg.value, fecha_seg.value
+        page.update()
+
+    def coletar():
+        grade = []
+        for dia, (chk, abre, fecha) in enumerate(linhas):
+            if not chk.value:
+                continue
+            # "HH:MM" com zero à esquerda: a comparação de texto equivale à de horário.
+            if not abre.value or not fecha.value or fecha.value <= abre.value:
+                raise ValueError(f"{_DIAS[dia]}: o fechamento deve ser depois da abertura.")
+            grade.append({"dia_semana": dia, "abre": abre.value, "fecha": fecha.value})
+        if not grade:
+            raise ValueError("Marque ao menos um dia de funcionamento.")
+        return grade
+
+    controle = ft.Column([
+        ft.Row([
+            ft.Text("Horário de funcionamento", size=15, weight=ft.FontWeight.BOLD, color=COR_TEXTO),
+            ft.TextButton("Repetir o horário de segunda nos dias marcados",
+                          icon=ft.Icons.COPY_ALL, on_click=repetir_segunda),
+        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True),
+        ft.Text("Desmarque os dias em que o espaço fica fechado. 24:00 = meia-noite.",
+                size=12, color=COR_TEXTO_SUAVE),
+        *[ft.Row([chk, abre, ft.Text("às", color=COR_TEXTO_SUAVE), fecha],
+                 spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+          for chk, abre, fecha in linhas],
+    ], spacing=6)
+    return controle, coletar
 
 
 def _desativar(page, espaco_id, recarregar):
