@@ -54,13 +54,12 @@ def estrelas_avaliacao(nota, tamanho=16):
 
 def snack(page, msg, cor=COR_SUCESSO):
     """Exibe uma mensagem temporária sem travar a aplicação."""
-    page.snack_bar = ft.SnackBar(
+    # Flet >= 0.80 removeu `page.snack_bar`; SnackBar agora é aberto via show_dialog.
+    page.show_dialog(ft.SnackBar(
         content=ft.Text(msg, color="white"),
         bgcolor=cor,
         duration=3000,
-    )
-    page.snack_bar.open = True
-    page.update()
+    ))
 
 
 def titulo_secao(texto):
@@ -215,14 +214,14 @@ def card_espaco(espaco, on_reservar=None, on_detalhe=None, on_favoritar=None,
     # Topo: imagem ou ícone da modalidade + badge.
     if espaco.get("foto_url"):
         topo_visual = ft.Container(
-            content=ft.Image(src=espaco["foto_url"], fit=ft.ImageFit.COVER, expand=True),
-            height=140, clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-            border_radius=ft.border_radius.only(top_left=14, top_right=14))
+            image=ft.DecorationImage(src=espaco["foto_url"], fit=ft.BoxFit.COVER),
+            height=140, bgcolor=COR_SECUNDARIA,
+            border_radius=ft.BorderRadius.only(top_left=14, top_right=14))
     else:
         topo_visual = ft.Container(
             content=ft.Icon(icone_modalidade(modalidade), size=54, color="white"),
             height=140, bgcolor=COR_SECUNDARIA, alignment=ft.Alignment(0, 0),
-           border_radius=ft.BorderRadius(top_left=14, top_right=14, bottom_left=0, bottom_right=0),
+            border_radius=ft.BorderRadius.only(top_left=14, top_right=14),
         )
 
     badge = ft.Container(

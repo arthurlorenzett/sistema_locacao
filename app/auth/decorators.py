@@ -13,7 +13,7 @@ from app.auth.seguranca import verificar_token
 from app.models.usuario_model import Usuario
 
 
-def _usuario_do_token():
+def usuario_do_token():
     """Lê o header Authorization, valida o token e devolve (usuario, erro_response, status)."""
     cabecalho = request.headers.get("Authorization", "")
     if not cabecalho.startswith("Bearer "):
@@ -37,7 +37,7 @@ def login_obrigatorio(func):
     """Garante que há um usuário autenticado válido."""
     @wraps(func)
     def wrapper(*args, **kwargs):
-        usuario, erro, status = _usuario_do_token()
+        usuario, erro, status = usuario_do_token()
         if erro is not None:
             return erro, status
         g.usuario = usuario
@@ -50,7 +50,7 @@ def requer_perfil(*perfis):
     def decorador(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            usuario, erro, status = _usuario_do_token()
+            usuario, erro, status = usuario_do_token()
             if erro is not None:
                 return erro, status
             if usuario.tipo_usuario not in perfis:

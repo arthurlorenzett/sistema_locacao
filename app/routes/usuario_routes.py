@@ -1,11 +1,17 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from sqlalchemy.exc import IntegrityError # Importação nova para capturar erro de exclusão
 from app.factories.usuario_factory import UsuarioFactory
 from app.models.usuario_model import Usuario
 from app.auth.seguranca import gerar_token
+from app.auth.decorators import login_obrigatorio, requer_perfil, usuario_do_token
 from app import db
 
 usuario_bp = Blueprint('usuario_bp', __name__)
+
+
+def _pode_acessar(id) -> bool:
+    """O próprio usuário ou um administrador."""
+    return g.usuario.tipo_usuario == 'administrador' or g.usuario.id == id
 
 @usuario_bp.route('/login', methods=['POST'], strict_slashes=False)
 def login():
@@ -34,7 +40,16 @@ def login():
 
 @usuario_bp.route('', methods=['POST'], strict_slashes=False)
 def cadastrar_usuario():
-    dados = request.get_json()
+    dados = request.get_json(silent=True) or {}
+
+    # Cadastro de locatário/locador é público; criar administrador exige ser administrador.
+    if dados.get('tipo') == 'administrador':
+        usuario, erro, status = usuario_do_token()
+        if erro is not None:
+            return erro, status
+        if usuario.tipo_usuario != 'administrador':
+            return jsonify({"erro": "Apenas administradores podem criar administradores."}), 403
+
     try:
         novo_usuario = UsuarioFactory.criar_usuario(
             tipo=dados.get('tipo'),
@@ -50,11 +65,15 @@ def cadastrar_usuario():
         return jsonify({"mensagem": f"Usuário '{dados.get('nome')}' cadastrado com sucesso!"}), 201
     except ValueError as e:
         return jsonify({"erro": str(e)}), 400
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"erro": "Já existe um usuário com este e-mail, CPF ou CNPJ."}), 409
     except Exception as e:
         db.session.rollback()
         return jsonify({"erro": "Erro interno no servidor."}), 500
 
 @usuario_bp.route('', methods=['GET'], strict_slashes=False)
+@requer_perfil('administrador')
 def listar_usuarios():
     usuarios = Usuario.query.all()
     lista = []
@@ -68,7 +87,10 @@ def listar_usuarios():
     return jsonify({"usuarios": lista, "total_usuarios": len(lista)}), 200
 
 @usuario_bp.route('/<int:id>', methods=['GET'])
+@login_obrigatorio
 def detalhar_usuario(id):
+    if not _pode_acessar(id):
+        return jsonify({"erro": "Você não tem permissão para esta ação."}), 403
     usuario = Usuario.query.get(id)
     if not usuario:
         return jsonify({"erro": "Usuário não encontrado."}), 404
@@ -89,12 +111,15 @@ def detalhar_usuario(id):
     return jsonify(dados), 200
 
 @usuario_bp.route('/<int:id>', methods=['PUT'])
+@login_obrigatorio
 def editar_usuario(id):
+    if not _pode_acessar(id):
+        return jsonify({"erro": "Você não tem permissão para esta ação."}), 403
     usuario = Usuario.query.get(id)
     if not usuario:
         return jsonify({"erro": "Usuário não encontrado."}), 404
         
-    dados = request.get_json()
+    dados = request.get_json(silent=True) or {}
     if 'nome' in dados:
         usuario.nome = dados['nome']
     if 'email' in dados:
@@ -102,10 +127,15 @@ def editar_usuario(id):
     if dados.get('senha'):
         usuario.definir_senha(dados['senha'])
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"erro": "Este e-mail já está em uso."}), 409
     return jsonify({"mensagem": "Usuário atualizado com sucesso!"}), 200
 
 @usuario_bp.route('/<int:id>', methods=['DELETE'])
+@requer_perfil('administrador')
 def deletar_usuario(id):
     usuario = Usuario.query.get(id)
     if not usuario:

@@ -38,8 +38,9 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
     grupo = ft.RadioGroup(content=ft.Column(opcoes, spacing=2), value=opcoes[0].value)
 
     def fechar(_=None):
+        # Fecha este diálogo especificamente (pop_dialog fecharia um SnackBar aberto por cima).
         dlg.open = False
-        page.update()
+        dlg.update()
 
     def confirmar(_):
         data = (f_data.value or "").strip()
@@ -80,9 +81,7 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
                               bgcolor=COR_PRIMARIA, color="white"),
         ],
     )
-    page.overlay.append(dlg)
-    dlg.open = True
-    page.update()
+    page.show_dialog(dlg)
 
 
 def tela_buscar_espacos(page: ft.Page):

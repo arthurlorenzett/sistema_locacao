@@ -9,10 +9,10 @@ import flet as ft
 
 from frontend.tema import aplicar_tema, COR_ESCURO, COR_PRIMARIA, COR_CARD, COR_TEXTO, COR_TEXTO_SUAVE
 from frontend.sessao import (
-    esta_logado, perfil_atual, obter_usuario, obter_token, limpar_sessao,
+    esta_logado, perfil_atual, obter_usuario, limpar_sessao,
     PERFIL_ADM, PERFIL_LOCADOR, PERFIL_LOCATARIO,
 )
-from frontend.api_client import definir_token, limpar_token
+from frontend.api_client import api_get
 from frontend.telas.login import tela_login
 from frontend.telas.status import tela_status
 from frontend.telas.perfil import tela_perfil
@@ -47,27 +47,27 @@ def _menu_por_perfil(perfil):
 def main(page: ft.Page):
     page.title = "Arena Fácil"
     page.padding = 0
-    if page.window:
+    if not page.web and page.window:
         page.window.width = 1100
         page.window.height = 720
     aplicar_tema(page)
+
+    # "Acorda" o backend em segundo plano (no Render free ele hiberna e demora
+    # ~1 min no primeiro acesso), para que o login não pegue o cold start inteiro.
+    page.run_thread(api_get, "/")
 
     def render():
         """(Re)constrói a interface conforme o estado de autenticação."""
         page.controls.clear()
         if not esta_logado(page):
-            limpar_token()
             page.add(tela_login(page, on_sucesso=render))
             page.update()
             return
-        # Garante que o api_client tenha o token (ex.: após recarregar a página).
-        definir_token(obter_token(page))
         page.add(_shell_autenticado(page, on_logout=_logout))
         page.update()
 
     def _logout():
         limpar_sessao(page)
-        limpar_token()
         render()
 
     def _shell_autenticado(page, on_logout):
