@@ -1,6 +1,7 @@
 """Dashboard / Status da API (visível para o administrador)."""
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import flet as ft
 
@@ -44,7 +45,7 @@ def tela_status(page: ft.Page):
                 ft.Text("Informações do sistema:", weight=ft.FontWeight.BOLD, color=COR_TEXTO),
                 ft.Text(f"Projeto:  {dados.get('projeto', '-')}", size=13),
                 ft.Text(f"Versão:   {dados.get('versao', '-')}", size=13),
-                ft.Text(f"Verificado em: {datetime.now().strftime('%H:%M:%S')}",
+                ft.Text(f"Verificado em: {datetime.now(ZoneInfo('America/Sao_Paulo')).strftime('%H:%M:%S')}",
                         size=12, color=COR_TEXTO_SUAVE),
             ]
         page.update()
