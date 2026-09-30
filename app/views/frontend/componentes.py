@@ -4,6 +4,9 @@ Centraliza a criação de campos, botões, cards e feedback (SnackBar) para mant
 padronização visual e evitar duplicação entre as telas.
 """
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import flet as ft
 
 from frontend.tema import (
@@ -33,6 +36,49 @@ def icone_modalidade(modalidade):
     """Devolve um ícone grande e reconhecível para a modalidade informada."""
     chave = (modalidade or "").strip().lower()
     return _ICONES_MODALIDADE.get(chave, ft.Icons.SPORTS)
+
+
+_DIAS_CURTOS = ("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom")
+
+
+def resumo_horarios(horarios):
+    """Resume a grade semanal agrupando dias seguidos com o mesmo horário.
+
+    Ex.: ["Seg a Sex: 08:00–22:00", "Sáb: 09:00–24:00", "Dom: fechado"].
+    """
+    if not horarios:
+        return []
+    por_dia = {h["dia_semana"]: (h["abre"], h["fecha"]) for h in horarios}
+    grupos = []  # [dia_inicial, dia_final, (abre, fecha) | None]
+    for dia in range(7):
+        faixa = por_dia.get(dia)
+        if grupos and grupos[-1][2] == faixa:
+            grupos[-1][1] = dia
+        else:
+            grupos.append([dia, dia, faixa])
+
+    linhas = []
+    for ini, fim, faixa in grupos:
+        if ini == fim:
+            dias = _DIAS_CURTOS[ini]
+        else:
+            ligacao = " e " if fim == ini + 1 else " a "
+            dias = _DIAS_CURTOS[ini] + ligacao + _DIAS_CURTOS[fim]
+        linhas.append(f"{dias}: {faixa[0]}–{faixa[1]}" if faixa else f"{dias}: fechado")
+    return linhas
+
+
+def dia_hoje():
+    """Dia da semana atual em Brasília (0 = segunda); o servidor do frontend roda em UTC."""
+    return datetime.now(ZoneInfo("America/Sao_Paulo")).weekday()
+
+
+def texto_hoje(horarios, dia_semana):
+    """"Hoje: 08:00–22:00" / "Hoje: fechado"; None se o espaço não informou horários."""
+    if not horarios:
+        return None
+    h = next((h for h in horarios if h["dia_semana"] == dia_semana), None)
+    return f"Hoje: {h['abre']}–{h['fecha']}" if h else "Hoje: fechado"
 
 
 def estrelas_avaliacao(nota, tamanho=16):
@@ -248,11 +294,14 @@ def card_espaco(espaco, on_reservar=None, on_detalhe=None, on_favoritar=None,
     for a in (acoes_extra or []):
         botoes.append(a)
 
+    linha_hoje = texto_hoje(espaco.get("horarios"), dia_hoje())
+
     corpo = ft.Column([
         ft.Text(espaco.get("nome", "—"), weight=ft.FontWeight.BOLD, size=16, color=COR_TEXTO),
         linha_rating,
         _linha_info(ft.Icons.LOCATION_ON_OUTLINED, espaco.get("endereco") or espaco.get("regiao") or "Local não informado"),
         _linha_info(ft.Icons.SPORTS, f"{modalidade}" + (f" • {espaco.get('tipo_quadra')}" if espaco.get("tipo_quadra") else "")),
+        *([_linha_info(ft.Icons.SCHEDULE, linha_hoje)] if linha_hoje else []),
         ft.Row([ft.Text(preco_txt, weight=ft.FontWeight.BOLD, size=15, color=COR_SECUNDARIA),
                 ft.Container(expand=True),
                 ft.Text(espaco.get("distancia") or "", size=12, color=COR_TEXTO_SUAVE)]),

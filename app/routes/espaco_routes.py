@@ -67,7 +67,8 @@ def listar_espacos():
             alvo = validacao.parse_datetime(f"{data}T{hora}")
         except ValueError as e:
             return jsonify({"erro": str(e)}), 400
-        espacos = [e for e in espacos if not _espaco_ocupado_em(e.id, alvo)]
+        espacos = [e for e in espacos
+                   if e.atende(alvo, alvo + _SLOT_PADRAO) and not _espaco_ocupado_em(e.id, alvo)]
 
     # Catálogo é público; se quem pede é um locatário logado, marca os favoritos dele.
     usuario, _erro, _status = usuario_do_token()
@@ -106,6 +107,7 @@ def criar_espaco():
 
     try:
         preco = validacao.validar_preco(dados.get('preco_hora'))
+        grade = validacao.validar_horarios(dados['horarios']) if 'horarios' in dados else None
     except ValueError as e:
         return jsonify({"erro": str(e)}), 400
 
@@ -125,6 +127,8 @@ def criar_espaco():
         ativo=True,
     )
     db.session.add(espaco)
+    if grade:
+        espaco.definir_horarios(grade)
     db.session.commit()
     return jsonify({"mensagem": "Espaço cadastrado com sucesso!", "id": espaco.id}), 201
 
@@ -158,6 +162,12 @@ def editar_espaco(id):
     for campo in ('aceita_online', 'aceita_presencial', 'disponivel', 'ativo'):
         if campo in dados:
             setattr(espaco, campo, bool(dados[campo]))
+    if 'horarios' in dados:
+        try:
+            espaco.definir_horarios(validacao.validar_horarios(dados['horarios']))
+        except ValueError as e:
+            db.session.rollback()
+            return jsonify({"erro": str(e)}), 400
 
     db.session.commit()
     return jsonify({"mensagem": "Espaço atualizado com sucesso!"}), 200

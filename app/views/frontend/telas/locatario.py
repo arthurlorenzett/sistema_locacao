@@ -10,7 +10,7 @@ from frontend.api_client import (
 )
 from frontend.componentes import (
     cabecalho_tela, card, card_espaco, faixa_estatisticas, campo, snack, estrelas_avaliacao,
-    icone_modalidade,
+    icone_modalidade, resumo_horarios,
 )
 from frontend.tema import (
     COR_PRIMARIA, COR_SECUNDARIA, COR_TEXTO, COR_TEXTO_SUAVE, COR_CARD,
@@ -72,6 +72,8 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
                     size=13, color=COR_TEXTO_SUAVE),
             ft.Text(f"Valor: R$ {espaco.get('preco_hora', 0):.0f}/hora",
                     size=13, color=COR_SECUNDARIA, weight=ft.FontWeight.BOLD),
+            *([ft.Text("Funcionamento: " + " · ".join(resumo_horarios(espaco["horarios"])),
+                       size=12, color=COR_TEXTO_SUAVE)] if espaco.get("horarios") else []),
             ft.Row([f_data, f_hora], spacing=8),
             ft.Text("Forma de pagamento:", size=13, color=COR_TEXTO),
             grupo,
