@@ -6,6 +6,7 @@ import flet as ft
 from frontend.api_client import (
     api_listar_espacos, api_reservar, api_confirmar_reserva,
     api_minhas_reservas, api_cancelar_reserva,
+    api_favoritos, api_favoritar, api_desfavoritar,
 )
 from frontend.componentes import (
     cabecalho_tela, card, card_espaco, faixa_estatisticas, campo, snack, estrelas_avaliacao,
@@ -121,6 +122,8 @@ def tela_buscar_espacos(page: ft.Page):
                     esp,
                     on_reservar=_fazer(esp, lambda e, x: dialogo_reserva(page, x, ao_sucesso=carregar)),
                     on_detalhe=_fazer(esp, lambda e, x: abrir_detalhe(x)),
+                    on_favoritar=alternar_favorito(page, esp),
+                    favorito=esp.get("favorito", False),
                 ))
         page.update()
 
@@ -173,6 +176,71 @@ def _hero(on_buscar, f_local, f_data, f_esporte, f_periodo, f_preco_max):
     ], spacing=8)
 
     return ft.Column([titulo, ft.Container(height=8), barra], spacing=4)
+
+
+def alternar_favorito(page, espaco, ao_remover=None):
+    """Handler do coração: favorita/desfavorita e troca o ícone no próprio botão."""
+    def handler(e):
+        if espaco.get("favorito"):
+            dados, code = api_desfavoritar(espaco["id"])
+            ok = code == 200
+        else:
+            dados, code = api_favoritar(espaco["id"])
+            ok = code in (200, 201)
+        if not ok:
+            snack(page, dados.get("erro", "Não foi possível atualizar os favoritos."), COR_ERRO)
+            return
+        espaco["favorito"] = not espaco.get("favorito")
+        e.control.icon = ft.Icons.FAVORITE if espaco["favorito"] else ft.Icons.FAVORITE_BORDER
+        e.control.update()
+        snack(page, dados.get("mensagem", "Favoritos atualizados."), COR_SUCESSO)
+        if not espaco["favorito"] and ao_remover:
+            ao_remover()
+    return handler
+
+
+def tela_favoritos(page: ft.Page):
+    """Espaços favoritados pelo locatário, com reserva e detalhe a um clique."""
+    raiz = ft.Container(expand=True)
+    grade = ft.ResponsiveRow(run_spacing=16, spacing=16)
+
+    def carregar():
+        dados, code = api_favoritos()
+        grade.controls.clear()
+        if code != 200:
+            grade.controls.append(_aviso(dados.get("erro", "Erro ao carregar favoritos.")))
+        else:
+            espacos = dados.get("espacos", [])
+            if not espacos:
+                grade.controls.append(_aviso(
+                    "Você ainda não tem favoritos. Toque no coração de um espaço na busca para guardá-lo aqui."))
+            for esp in espacos:
+                grade.controls.append(card_espaco(
+                    esp,
+                    on_reservar=_fazer(esp, lambda e, x: dialogo_reserva(page, x, ao_sucesso=carregar)),
+                    on_detalhe=_fazer(esp, lambda e, x: abrir_detalhe(x)),
+                    on_favoritar=alternar_favorito(page, esp, ao_remover=carregar),
+                    favorito=True,
+                ))
+        page.update()
+
+    def abrir_detalhe(espaco):
+        raiz.content = view_detalhe(
+            page, espaco,
+            on_voltar=mostrar_lista,
+            on_reservar=lambda: dialogo_reserva(page, espaco, ao_sucesso=mostrar_lista),
+        )
+        page.update()
+
+    def mostrar_lista():
+        raiz.content = ft.Column([
+            cabecalho_tela("Meus Favoritos"),
+            ft.Container(content=grade, padding=ft.Padding(0, 12, 0, 12)),
+        ], spacing=8, scroll=ft.ScrollMode.AUTO)
+        carregar()
+
+    mostrar_lista()
+    return raiz
 
 
 def _aviso(texto):

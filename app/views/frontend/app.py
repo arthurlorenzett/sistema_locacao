@@ -18,7 +18,7 @@ from frontend.telas.status import tela_status
 from frontend.telas.perfil import tela_perfil
 from frontend.telas.usuarios import tela_usuarios, tela_cadastro, tela_editar
 from frontend.telas.locador import tela_meus_espacos, tela_reservas_recebidas
-from frontend.telas.locatario import tela_buscar_espacos, tela_minhas_reservas
+from frontend.telas.locatario import tela_buscar_espacos, tela_minhas_reservas, tela_favoritos
 
 
 def _menu_por_perfil(perfil):
@@ -40,6 +40,7 @@ def _menu_por_perfil(perfil):
     return [
         (ft.Icons.SEARCH, "Buscar Quadras", tela_buscar_espacos),
         (ft.Icons.EVENT, "Minhas Reservas", tela_minhas_reservas),
+        (ft.Icons.FAVORITE, "Favoritos", tela_favoritos),
         (ft.Icons.DASHBOARD, "Início", tela_status),
     ]
 
