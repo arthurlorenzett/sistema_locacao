@@ -5,34 +5,33 @@ diretamente: tudo passa por estas funções (Frontend Flet -> Backend Flask -> D
 Cada função retorna a tupla `(dados: dict, status_code: int)`; `status_code == 0`
 indica falha de conexão.
 
-O token de sessão é mantido em nível de módulo (`definir_token`/`limpar_token`)
-e enviado automaticamente no header `Authorization: Bearer` das requisições.
+O token é lido da sessão da página Flet atual (`ft.context.page`) e enviado no
+header `Authorization: Bearer`. Ele NÃO pode ficar em variável global: no modo
+web um único processo Python atende todos os navegadores, e um token global faria
+um usuário herdar a sessão do último que fez login.
 """
 
 from urllib.parse import urlencode
 
+import flet as ft
 import requests
 
 from frontend.config import API_BASE
+from frontend.sessao import obter_token
 
+# Generoso porque o backend no plano free do Render "dorme" e leva ~1 min para acordar.
 TIMEOUT = 60
 
-# Token de autenticação atual (definido após o login).
-_TOKEN = None
-
-
-def definir_token(token):
-    global _TOKEN
-    _TOKEN = token
-
-
-def limpar_token():
-    global _TOKEN
-    _TOKEN = None
+_ERRO_CONEXAO = "Não foi possível conectar à API. Verifique se o backend está rodando."
+_ERRO_TIMEOUT = "O servidor demorou demais para responder. Tente novamente em instantes."
 
 
 def _headers():
-    return {"Authorization": f"Bearer {_TOKEN}"} if _TOKEN else {}
+    try:
+        token = obter_token(ft.context.page)
+    except RuntimeError:  # fora de um callback Flet (ex.: scripts/testes)
+        token = None
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 def _resposta(r):
@@ -43,32 +42,31 @@ def _resposta(r):
         return {"erro": f"Resposta inesperada do servidor (status {r.status_code})."}, r.status_code
 
 
-def api_get(path):
+def _requisitar(metodo, path, data=None):
     try:
-        return _resposta(requests.get(f"{API_BASE}{path}", headers=_headers(), timeout=TIMEOUT))
-    except requests.exceptions.ConnectionError:
-        return {"erro": "Não foi possível conectar à API. Verifique se o backend está rodando."}, 0
+        r = requests.request(metodo, f"{API_BASE}{path}", json=data,
+                             headers=_headers(), timeout=TIMEOUT)
+    except requests.exceptions.Timeout:
+        return {"erro": _ERRO_TIMEOUT}, 0
+    except requests.exceptions.RequestException:
+        return {"erro": _ERRO_CONEXAO}, 0
+    return _resposta(r)
+
+
+def api_get(path):
+    return _requisitar("GET", path)
 
 
 def api_post(path, data):
-    try:
-        return _resposta(requests.post(f"{API_BASE}{path}", json=data, headers=_headers(), timeout=TIMEOUT))
-    except requests.exceptions.ConnectionError:
-        return {"erro": "Não foi possível conectar à API."}, 0
+    return _requisitar("POST", path, data)
 
 
 def api_put(path, data):
-    try:
-        return _resposta(requests.put(f"{API_BASE}{path}", json=data, headers=_headers(), timeout=TIMEOUT))
-    except requests.exceptions.ConnectionError:
-        return {"erro": "Não foi possível conectar à API."}, 0
+    return _requisitar("PUT", path, data)
 
 
 def api_delete(path):
-    try:
-        return _resposta(requests.delete(f"{API_BASE}{path}", headers=_headers(), timeout=TIMEOUT))
-    except requests.exceptions.ConnectionError:
-        return {"erro": "Não foi possível conectar à API."}, 0
+    return _requisitar("DELETE", path)
 
 
 # --- Autenticação ---

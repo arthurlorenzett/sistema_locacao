@@ -23,12 +23,12 @@ def view_detalhe(page: ft.Page, espaco: dict, on_voltar, on_reservar):
 
     if espaco.get("foto_url"):
         topo = ft.Container(
-            content=ft.Image(src=espaco["foto_url"], fit=ft.ImageFit.COVER, expand=True),
-            height=220, border_radius=14, clip_behavior=ft.ClipBehavior.ANTI_ALIAS)
+            image=ft.DecorationImage(src=espaco["foto_url"], fit=ft.BoxFit.COVER),
+            height=220, border_radius=14, bgcolor=COR_SECUNDARIA)
     else:
         topo = ft.Container(
             content=ft.Icon(icone_modalidade(modalidade), size=80, color="white"),
-            height=220, bgcolor=COR_SECUNDARIA, alignment=ft.alignment.center, border_radius=14)
+            height=220, bgcolor=COR_SECUNDARIA, alignment=ft.Alignment.CENTER, border_radius=14)
 
     pagamentos = []
     if espaco.get("aceita_online", True):

@@ -5,8 +5,14 @@ env/
 
 # Configurações locais e senhas
 .env
+*.env
+!.env.example
 
 # Arquivos do Python
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Banco local de desenvolvimento / testes
+*.db
+.pytest_cache/

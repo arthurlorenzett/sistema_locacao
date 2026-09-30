@@ -1,0 +1,32 @@
+# Deploy no Render (Blueprint): Dashboard > New > Blueprint > selecione este repositório.
+# São dois serviços: a API Flask e o frontend Flet (modo web).
+# Após o primeiro deploy da API, copie a URL dela para a variável API_BASE do frontend.
+services:
+  - type: web
+    name: arena-facil-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # main.py aplica as migrations ao iniciar; o timeout maior cobre o cold start do banco.
+    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT --timeout 120
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.3
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+
+  - type: web
+    name: arena-facil-web
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app/views/gui_flet.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.14.3
+      # URL pública da API, ex.: https://arena-facil-api.onrender.com (sem barra no final)
+      - key: API_BASE
+        sync: false

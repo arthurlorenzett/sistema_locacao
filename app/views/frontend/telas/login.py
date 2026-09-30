@@ -2,7 +2,7 @@
 
 import flet as ft
 
-from frontend.api_client import api_login, definir_token
+from frontend.api_client import api_login
 from frontend.sessao import salvar_usuario
 from frontend.componentes import campo, botao_primario, snack, card
 from frontend.tema import (
@@ -26,10 +26,19 @@ def tela_login(page: ft.Page, on_sucesso):
             snack(page, "Preencha e-mail e senha.", COR_AVISO)
             return
 
-        dados, code = api_login(email, senha)
+        # Feedback visual: a primeira requisição pode demorar (cold start do backend).
+        btn_entrar.disabled = True
+        btn_entrar.content = "Entrando..."
+        page.update()
+        try:
+            dados, code = api_login(email, senha)
+        finally:
+            btn_entrar.disabled = False
+            btn_entrar.content = "Entrar"
+            page.update()
+
         if code == 200:
             salvar_usuario(page, dados)
-            definir_token(dados.get("token"))
             on_sucesso()
         elif code == 0:
             snack(page, dados.get("erro", "Sem conexão com o servidor."), COR_ERRO)
@@ -37,6 +46,7 @@ def tela_login(page: ft.Page, on_sucesso):
             snack(page, dados.get("erro", "Não foi possível entrar."), COR_ERRO)
 
     f_senha.on_submit = entrar
+    btn_entrar = botao_primario("Entrar", entrar, width=320, icone=ft.Icons.LOGIN)
 
     formulario = card(
         ft.Column(
@@ -48,7 +58,7 @@ def tela_login(page: ft.Page, on_sucesso):
                 f_email,
                 f_senha,
                 ft.Container(height=8),
-                botao_primario("Entrar", entrar, width=320, icone=ft.Icons.LOGIN),
+                btn_entrar,
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=12,
@@ -65,6 +75,6 @@ def tela_login(page: ft.Page, on_sucesso):
         ),
         expand=True,
         bgcolor=COR_FUNDO,
-        alignment=ft.alignment.Alignment(0, 0),
+        alignment=ft.Alignment.CENTER,
         padding=24,
     )
