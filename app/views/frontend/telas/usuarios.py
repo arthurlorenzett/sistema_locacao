@@ -17,7 +17,7 @@ def tela_usuarios(page: ft.Page):
 
     def fechar_dlg(dlg):
         dlg.open = False
-        page.update()
+        dlg.update()
 
     def carregar():
         lista_view.controls.clear()
@@ -69,9 +69,7 @@ def tela_usuarios(page: ft.Page):
             ),
             actions=[ft.TextButton("Fechar", on_click=lambda e: fechar_dlg(dlg))],
         )
-        page.dialog = dlg
-        dlg.open = True
-        page.update()
+        page.show_dialog(dlg)
 
     def confirmar_deletar(uid, nome):
         def executar(e):
@@ -91,9 +89,7 @@ def tela_usuarios(page: ft.Page):
                 botao_perigo("Deletar", executar, width=110),
             ],
         )
-        page.dialog = dlg
-        dlg.open = True
-        page.update()
+        page.show_dialog(dlg)
 
     carregar()
 
@@ -144,7 +140,7 @@ def tela_cadastro(page: ft.Page):
         campos_locador.visible   = tipo_dd.value == "locador"
         page.update()
 
-    tipo_dd.on_change = on_tipo_change
+    tipo_dd.on_select = on_tipo_change
 
     def cadastrar(e):
         payload = {

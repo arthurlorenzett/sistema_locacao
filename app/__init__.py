@@ -41,6 +41,9 @@ def create_app():
 
     _registrar_handlers_erro(app)
 
+    from app.cli import registrar_comandos
+    registrar_comandos(app)
+
     return app
 
 
