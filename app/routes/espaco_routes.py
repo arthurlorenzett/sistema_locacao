@@ -11,7 +11,8 @@ from flask import Blueprint, request, jsonify, g
 from app import db
 from app.models.espaco_esportivo_model import EspacoEsportivo
 from app.models.reserva_model import Reserva
-from app.auth.decorators import requer_perfil, login_obrigatorio
+from app.auth.decorators import requer_perfil, login_obrigatorio, usuario_do_token
+from app.routes.favorito_routes import ids_favoritos
 from app.services import validacao
 
 espaco_bp = Blueprint('espaco_bp', __name__)
@@ -68,8 +69,12 @@ def listar_espacos():
             return jsonify({"erro": str(e)}), 400
         espacos = [e for e in espacos if not _espaco_ocupado_em(e.id, alvo)]
 
+    # Catálogo é público; se quem pede é um locatário logado, marca os favoritos dele.
+    usuario, _erro, _status = usuario_do_token()
+    favoritos = ids_favoritos(usuario.id) if usuario and usuario.tipo_usuario == 'locatario' else set()
+
     return jsonify({
-        "espacos": [e.to_dict() for e in espacos],
+        "espacos": [dict(e.to_dict(), favorito=e.id in favoritos) for e in espacos],
         "total": len(espacos),
     }), 200
 
