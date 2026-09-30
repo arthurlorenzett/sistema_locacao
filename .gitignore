@@ -16,3 +16,6 @@ __pycache__/
 # Banco local de desenvolvimento / testes
 *.db
 .pytest_cache/
+
+# Credenciais locais
+senha_banco.txt
