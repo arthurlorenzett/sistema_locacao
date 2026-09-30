@@ -6,13 +6,9 @@ from app import db
 from app.models.espaco_esportivo_model import EspacoEsportivo
 from app.models.favorito_model import Favorito
 from app.auth.decorators import requer_perfil
+from app.services.catalogo import dict_catalogo
 
 favorito_bp = Blueprint('favorito_bp', __name__)
-
-
-def ids_favoritos(locatario_id) -> set:
-    """Ids dos espaços favoritados pelo locatário (usado também no catálogo)."""
-    return {f.espaco_id for f in Favorito.query.filter_by(locatario_id=locatario_id).all()}
 
 
 @favorito_bp.route('', methods=['GET'], strict_slashes=False)
@@ -23,7 +19,8 @@ def listar_favoritos():
                .filter(Favorito.locatario_id == g.usuario.id, EspacoEsportivo.ativo.is_(True))
                .order_by(Favorito.created_at.desc())
                .all())
-    return jsonify({"espacos": [dict(e.to_dict(), favorito=True) for e in espacos],
+    todos = {e.id for e in espacos}
+    return jsonify({"espacos": [dict_catalogo(e, todos) for e in espacos],
                     "total": len(espacos)}), 200
 
 

@@ -4,10 +4,9 @@ Centraliza a criação de campos, botões, cards e feedback (SnackBar) para mant
 padronização visual e evitar duplicação entre as telas.
 """
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
 import flet as ft
+
+from frontend import agenda
 
 from frontend.tema import (
     COR_PRIMARIA, COR_SECUNDARIA, COR_ESCURO, COR_CARD, COR_TEXTO, COR_TEXTO_SUAVE,
@@ -70,7 +69,7 @@ def resumo_horarios(horarios):
 
 def dia_hoje():
     """Dia da semana atual em Brasília (0 = segunda); o servidor do frontend roda em UTC."""
-    return datetime.now(ZoneInfo("America/Sao_Paulo")).weekday()
+    return agenda.hoje().weekday()
 
 
 def texto_hoje(horarios, dia_semana):
@@ -273,7 +272,7 @@ def card_espaco(espaco, on_reservar=None, on_detalhe=None, on_favoritar=None,
     badge = ft.Container(
         content=ft.Text("Disponível Hoje", size=11, color="white", weight=ft.FontWeight.W_600),
         bgcolor=COR_PRIMARIA, padding=ft.Padding(8, 3, 8, 3), border_radius=8,
-    ) if espaco.get("disponivel", True) else ft.Container()
+    ) if espaco.get("livre_hoje") else ft.Container()
 
     topo = ft.Stack([topo_visual, ft.Container(content=badge, padding=8)], height=140)
 

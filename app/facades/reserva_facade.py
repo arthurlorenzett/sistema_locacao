@@ -5,30 +5,13 @@ disponibilidade, conflito de horário, reserva duplicada, pagamento (simulado)
 e cancelamento — sempre via o padrão State da `Reserva`.
 """
 
-from datetime import timedelta
-
 from app.models.reserva_model import Reserva
 from app.models.espaco_esportivo_model import EspacoEsportivo
-from app.services import validacao
+from app.services import agenda, validacao
 from app import db
-
-# Duração padrão de uma reserva quando não há data_fim explícita.
-_SLOT_PADRAO = timedelta(hours=1)
 
 
 class ReservaFacade:
-
-    @staticmethod
-    def _ha_sobreposicao(espaco_id, inicio, fim, ignorar_id=None) -> bool:
-        """Detecta choque de horário com reservas confirmadas (intervalos abertos à direita)."""
-        confirmadas = Reserva.query.filter_by(espaco_id=espaco_id, status_texto="Confirmada").all()
-        for r in confirmadas:
-            if ignorar_id and r.id == ignorar_id:
-                continue
-            r_fim = r.data_fim or (r.data_horario + _SLOT_PADRAO)
-            if inicio < r_fim and r.data_horario < fim:
-                return True
-        return False
 
     @staticmethod
     def realizar_reserva(locatario_id, espaco_id, data_horario, data_fim=None):
@@ -36,7 +19,7 @@ class ReservaFacade:
             raise ValueError("Locatário e espaço são obrigatórios.")
 
         inicio = validacao.validar_data_horario_futuro(data_horario)
-        fim = validacao.parse_datetime(data_fim) if data_fim else inicio + _SLOT_PADRAO
+        fim = validacao.parse_datetime(data_fim) if data_fim else inicio + agenda.DURACAO_SLOT
         if fim <= inicio:
             raise ValueError("O horário de término deve ser depois do início.")
 
@@ -58,7 +41,7 @@ class ReservaFacade:
             raise ValueError("Você já possui uma reserva para este espaço neste horário.")
 
         # Conflito com reserva confirmada de qualquer cliente.
-        if ReservaFacade._ha_sobreposicao(espaco_id, inicio, fim):
+        if agenda.esta_reservado(espaco_id, inicio, fim):
             raise ValueError("Já existe uma reserva confirmada para este horário.")
 
         nova_reserva = Reserva(
@@ -90,9 +73,9 @@ class ReservaFacade:
                 raise ValueError("Este espaço não aceita pagamento presencial.")
 
         # Reconfere conflito no momento da confirmação.
-        fim = reserva.data_fim or (reserva.data_horario + _SLOT_PADRAO)
-        if ReservaFacade._ha_sobreposicao(reserva.espaco_id, reserva.data_horario, fim,
-                                          ignorar_id=reserva.id):
+        fim = reserva.data_fim or (reserva.data_horario + agenda.DURACAO_SLOT)
+        if agenda.esta_reservado(reserva.espaco_id, reserva.data_horario, fim,
+                                 ignorar_reserva_id=reserva.id):
             raise ValueError("Horário já foi confirmado por outra reserva.")
 
         try:

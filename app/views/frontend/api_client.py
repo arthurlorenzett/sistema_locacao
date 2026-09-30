@@ -93,6 +93,11 @@ def api_espaco(id):
     return api_get(f"/espacos/{id}")
 
 
+def api_disponibilidade(espaco_id, data):
+    """Horários do dia (data AAAA-MM-DD) com o que está livre para reservar."""
+    return api_get(f"/espacos/{espaco_id}/disponibilidade?data={data}")
+
+
 def api_criar_espaco(dados):
     return api_post("/espacos", dados)
 

@@ -3,14 +3,15 @@ minhas reservas — no estilo da referência "Arena Fácil"."""
 
 import flet as ft
 
+from frontend import agenda
 from frontend.api_client import (
-    api_listar_espacos, api_reservar, api_confirmar_reserva,
+    api_listar_espacos, api_disponibilidade, api_reservar, api_confirmar_reserva,
     api_minhas_reservas, api_cancelar_reserva,
     api_favoritos, api_favoritar, api_desfavoritar,
 )
 from frontend.componentes import (
     cabecalho_tela, card, card_espaco, faixa_estatisticas, campo, snack, estrelas_avaliacao,
-    icone_modalidade, resumo_horarios,
+    icone_modalidade,
 )
 from frontend.tema import (
     COR_PRIMARIA, COR_SECUNDARIA, COR_TEXTO, COR_TEXTO_SUAVE, COR_CARD,
@@ -22,12 +23,24 @@ from frontend.telas.detalhe_espaco import view_detalhe
 _MODALIDADES = ["Futebol", "Futsal", "Tênis", "Vôlei", "Basquete", "Beach Tênis"]
 # Período -> hora representativa usada no filtro de disponibilidade.
 _PERIODOS = {"Manhã": "09:00", "Tarde": "14:00", "Noite": "19:00"}
+_DURACOES = {"1": "1 hora", "2": "2 horas", "3": "3 horas"}
+# Por que um horário aparece desativado na grade do diálogo de reserva.
+_MOTIVOS = {"passado": "Horário já passou", "reservado": "Já reservado"}
+_COR_SELECAO = "#A7F3D0"  # verde claro para o dia/horário escolhido
 
 
 def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
-    """Abre o diálogo de reserva (data/hora + método de pagamento)."""
-    f_data = campo("Data (AAAA-MM-DD)", width=190)
-    f_hora = campo("Hora (HH:MM)", width=130)
+    """Diálogo de reserva: escolhe o dia, um horário livre, a duração e o pagamento."""
+    dia_hoje = agenda.hoje()
+    estado = {"dia": dia_hoje, "horarios": [], "indice": None}
+    preco = float(espaco.get("preco_hora") or 0)
+
+    linha_dias = ft.Row(spacing=6, scroll=ft.ScrollMode.AUTO)
+    grade_horarios = ft.Row(spacing=6, run_spacing=6, wrap=True)
+    info_dia = ft.Text("Carregando horários...", size=12, color=COR_TEXTO_SUAVE)
+    resumo = ft.Text("", size=13, weight=ft.FontWeight.W_600, color=COR_SECUNDARIA)
+    f_duracao = ft.Dropdown(label="Duração", value="1", width=140, dense=True,
+                            options=[ft.dropdown.Option(k, v) for k, v in _DURACOES.items()])
 
     opcoes = []
     if espaco.get("aceita_online", True):
@@ -38,20 +51,83 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
         opcoes.append(ft.Radio(value="presencial", label="Pagamento presencial"))
     grupo = ft.RadioGroup(content=ft.Column(opcoes, spacing=2), value=opcoes[0].value)
 
+    def atualizar_resumo():
+        i, horarios = estado["indice"], estado["horarios"]
+        if i is None:
+            resumo.value = ""
+            return
+        horas = int(f_duracao.value or 1)
+        if not agenda.pode_reservar(horarios, i, horas):
+            resumo.value = f"Não há {_DURACOES[str(horas)]} livres seguidas a partir das {horarios[i]['inicio']}."
+            resumo.color = COR_AVISO
+            return
+        fim = horarios[i + horas - 1]["fim"]
+        resumo.value = (f"{agenda.rotulo_dia(estado['dia'], dia_hoje)} · {horarios[i]['inicio']}–{fim}"
+                        f" · R$ {preco * horas:.0f}")
+        resumo.color = COR_SECUNDARIA
+
+    def desenhar():
+        linha_dias.controls = [
+            ft.Chip(label=ft.Text(agenda.rotulo_dia(d, dia_hoje)), selected=d == estado["dia"],
+                    show_checkmark=False, selected_color=_COR_SELECAO, on_select=_escolher_dia(d))
+            for d in agenda.proximos_dias(dia_hoje)
+        ]
+        grade_horarios.controls = [
+            ft.Chip(label=ft.Text(h["inicio"]), selected=i == estado["indice"], show_checkmark=False,
+                    selected_color=_COR_SELECAO, disabled=not h["disponivel"],
+                    tooltip=_MOTIVOS.get(h.get("motivo")), on_select=_escolher_horario(i))
+            for i, h in enumerate(estado["horarios"])
+        ]
+        atualizar_resumo()
+        page.update()
+
+    def carregar_dia(dia):
+        estado.update(dia=dia, indice=None)
+        dados, code = api_disponibilidade(espaco["id"], dia.isoformat())
+        estado["horarios"] = dados.get("horarios", []) if code == 200 else []
+        if code != 200:
+            info_dia.value = dados.get("erro", "Não foi possível carregar os horários.")
+        elif not estado["horarios"]:
+            info_dia.value = "O espaço fica fechado neste dia."
+        elif not any(h["disponivel"] for h in estado["horarios"]):
+            info_dia.value = "Nenhum horário livre neste dia."
+        else:
+            info_dia.value = f"Funcionamento: {dados.get('funcionamento')}. Toque em um horário livre."
+        desenhar()
+
+    def _escolher_dia(dia):
+        return lambda e: carregar_dia(dia)
+
+    def _escolher_horario(indice):
+        def handler(e):
+            estado["indice"] = indice
+            desenhar()
+        return handler
+
+    def ao_mudar_duracao(e):
+        atualizar_resumo()
+        page.update()
+
+    f_duracao.on_select = ao_mudar_duracao
+
     def fechar(_=None):
         # Fecha este diálogo especificamente (pop_dialog fecharia um SnackBar aberto por cima).
         dlg.open = False
         dlg.update()
 
     def confirmar(_):
-        data = (f_data.value or "").strip()
-        hora = (f_hora.value or "").strip()
-        if not data or not hora:
-            snack(page, "Informe data e hora.", COR_AVISO)
+        i, horas = estado["indice"], int(f_duracao.value or 1)
+        if i is None:
+            snack(page, "Escolha um horário livre.", COR_AVISO)
             return
-        dados, code = api_reservar(espaco["id"], f"{data}T{hora}")
+        if not agenda.pode_reservar(estado["horarios"], i, horas):
+            snack(page, resumo.value, COR_AVISO)
+            return
+        inicio, fim = agenda.periodo_reserva(estado["dia"], estado["horarios"], i, horas)
+        dados, code = api_reservar(espaco["id"], inicio, fim)
         if code != 201:
             snack(page, dados.get("erro", "Não foi possível reservar."), COR_ERRO)
+            carregar_dia(estado["dia"])  # o horário pode ter sido ocupado nesse meio tempo
             return
         # Confirma o pagamento (online/presencial) — fluxo de poucos cliques.
         rid = dados.get("reserva_id")
@@ -68,16 +144,18 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
         modal=True,
         title=ft.Text(f"Reservar — {espaco.get('nome', '')}", color=COR_TEXTO),
         content=ft.Column([
-            ft.Text(f"Modalidade: {espaco.get('modalidade') or espaco.get('tipo_esporte')}",
+            ft.Text(f"{espaco.get('modalidade') or espaco.get('tipo_esporte')} · R$ {preco:.0f}/hora",
                     size=13, color=COR_TEXTO_SUAVE),
-            ft.Text(f"Valor: R$ {espaco.get('preco_hora', 0):.0f}/hora",
-                    size=13, color=COR_SECUNDARIA, weight=ft.FontWeight.BOLD),
-            *([ft.Text("Funcionamento: " + " · ".join(resumo_horarios(espaco["horarios"])),
-                       size=12, color=COR_TEXTO_SUAVE)] if espaco.get("horarios") else []),
-            ft.Row([f_data, f_hora], spacing=8),
-            ft.Text("Forma de pagamento:", size=13, color=COR_TEXTO),
+            ft.Text("Dia", size=13, weight=ft.FontWeight.W_600, color=COR_TEXTO),
+            linha_dias,
+            ft.Text("Horário de início", size=13, weight=ft.FontWeight.W_600, color=COR_TEXTO),
+            info_dia,
+            grade_horarios,
+            f_duracao,
+            resumo,
+            ft.Text("Forma de pagamento", size=13, weight=ft.FontWeight.W_600, color=COR_TEXTO),
             grupo,
-        ], tight=True, spacing=10, width=360),
+        ], tight=True, spacing=10, width=480, scroll=ft.ScrollMode.AUTO),
         actions=[
             ft.TextButton("Cancelar", on_click=fechar),
             ft.ElevatedButton("Confirmar reserva", on_click=confirmar,
@@ -85,6 +163,7 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
         ],
     )
     page.show_dialog(dlg)
+    carregar_dia(dia_hoje)
 
 
 def tela_buscar_espacos(page: ft.Page):
@@ -100,6 +179,16 @@ def tela_buscar_espacos(page: ft.Page):
                             options=[ft.dropdown.Option("")] + [ft.dropdown.Option(p) for p in _PERIODOS])
     f_preco_min = campo("Preço mín. (R$)", width=150)
     f_preco_max = campo("Preço máx. (R$)", width=150)
+    c_livre_hoje = ft.Checkbox(label="Só com horário livre hoje", value=False)
+    filtros_tela = [
+        ft.Container(f_local, col={"sm": 12, "md": 4}),
+        ft.Container(f_data, col={"sm": 6, "md": 3}),
+        ft.Container(f_esporte, col={"sm": 6, "md": 2}),
+        ft.Container(f_periodo, col={"sm": 6, "md": 3}),
+        ft.Container(f_preco_min, col={"sm": 6, "md": 3}),
+        ft.Container(f_preco_max, col={"sm": 6, "md": 3}),
+        ft.Container(c_livre_hoje, col={"sm": 12, "md": 4}),
+    ]
 
     def carregar(_=None):
         filtros = {
@@ -111,6 +200,8 @@ def tela_buscar_espacos(page: ft.Page):
         }
         if f_periodo.value:
             filtros["hora"] = _PERIODOS.get(f_periodo.value, "")
+        if c_livre_hoje.value:
+            filtros["disponivel_hoje"] = "1"
         dados, code = api_listar_espacos(filtros)
         grade.controls.clear()
         if code == 0:
@@ -141,7 +232,7 @@ def tela_buscar_espacos(page: ft.Page):
 
     def mostrar_lista():
         raiz.content = ft.Column([
-            _hero(carregar, f_local, f_data, f_esporte, f_periodo, f_preco_min, f_preco_max),
+            _hero(carregar, filtros_tela),
             ft.Container(height=8),
             cabecalho_tela("Locais Disponíveis"),
             ft.Text("Os espaços esportivos mais bem avaliados da sua região",
@@ -162,17 +253,11 @@ def _valor(campo_preco):
     return (campo_preco.value or "").strip().replace(",", ".")
 
 
-def _hero(on_buscar, f_local, f_data, f_esporte, f_periodo, f_preco_min, f_preco_max):
+def _hero(on_buscar, filtros):
+    """Título + barra de busca; `filtros` são os campos já com a coluna responsiva definida."""
     barra = card(ft.Column([
         ft.Text("Encontre sua próxima partida", size=15, weight=ft.FontWeight.BOLD, color=COR_TEXTO),
-        ft.ResponsiveRow([
-            ft.Container(f_local, col={"sm": 12, "md": 4}),
-            ft.Container(f_data, col={"sm": 6, "md": 3}),
-            ft.Container(f_esporte, col={"sm": 6, "md": 2}),
-            ft.Container(f_periodo, col={"sm": 6, "md": 3}),
-            ft.Container(f_preco_min, col={"sm": 6, "md": 3}),
-            ft.Container(f_preco_max, col={"sm": 6, "md": 3}),
-        ], spacing=10, run_spacing=10),
+        ft.ResponsiveRow(filtros, spacing=10, run_spacing=10),
         ft.ElevatedButton("Buscar Quadras", icon=ft.Icons.SEARCH, on_click=on_buscar,
                           bgcolor=COR_PRIMARIA, color="white", height=44,
                           style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10))),
