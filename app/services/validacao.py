@@ -7,6 +7,11 @@ entrada inconsistente chegue às regras de negócio.
 
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+# Datas trafegam "ingênuas" (sem fuso) no horário de Brasília. O servidor (Render)
+# roda em UTC, então "agora" precisa ser calculado explicitamente neste fuso.
+FUSO = ZoneInfo("America/Sao_Paulo")
 
 _RE_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -69,10 +74,15 @@ def parse_datetime(valor) -> datetime:
     raise ValueError("Data/horário em formato inválido.")
 
 
+def agora() -> datetime:
+    """Data/hora atual no horário de Brasília, sem fuso (mesmo formato das reservas)."""
+    return datetime.now(FUSO).replace(tzinfo=None)
+
+
 def validar_data_horario_futuro(valor) -> datetime:
     """Garante que a data/horário é válida e está no futuro."""
     quando = parse_datetime(valor)
-    if quando < datetime.now():
+    if quando < agora():
         raise ValueError("A data/horário da reserva deve estar no futuro.")
     return quando
 
