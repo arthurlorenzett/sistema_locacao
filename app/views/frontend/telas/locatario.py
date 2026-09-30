@@ -96,14 +96,16 @@ def tela_buscar_espacos(page: ft.Page):
                             options=[ft.dropdown.Option("")] + [ft.dropdown.Option(m) for m in _MODALIDADES])
     f_periodo = ft.Dropdown(label="Horário", width=150,
                             options=[ft.dropdown.Option("")] + [ft.dropdown.Option(p) for p in _PERIODOS])
-    f_preco_max = campo("Preço máx.", width=130)
+    f_preco_min = campo("Preço mín. (R$)", width=150)
+    f_preco_max = campo("Preço máx. (R$)", width=150)
 
     def carregar(_=None):
         filtros = {
             "regiao": (f_local.value or "").strip(),
             "modalidade": f_esporte.value or "",
             "data": (f_data.value or "").strip(),
-            "preco_max": (f_preco_max.value or "").strip(),
+            "preco_min": _valor(f_preco_min),
+            "preco_max": _valor(f_preco_max),
         }
         if f_periodo.value:
             filtros["hora"] = _PERIODOS.get(f_periodo.value, "")
@@ -137,7 +139,7 @@ def tela_buscar_espacos(page: ft.Page):
 
     def mostrar_lista():
         raiz.content = ft.Column([
-            _hero(carregar, f_local, f_data, f_esporte, f_periodo, f_preco_max),
+            _hero(carregar, f_local, f_data, f_esporte, f_periodo, f_preco_min, f_preco_max),
             ft.Container(height=8),
             cabecalho_tela("Locais Disponíveis"),
             ft.Text("Os espaços esportivos mais bem avaliados da sua região",
@@ -153,15 +155,21 @@ def tela_buscar_espacos(page: ft.Page):
     return raiz
 
 
-def _hero(on_buscar, f_local, f_data, f_esporte, f_periodo, f_preco_max):
+def _valor(campo_preco):
+    """Texto do campo de preço aceitando vírgula decimal (ex.: "80,50")."""
+    return (campo_preco.value or "").strip().replace(",", ".")
+
+
+def _hero(on_buscar, f_local, f_data, f_esporte, f_periodo, f_preco_min, f_preco_max):
     barra = card(ft.Column([
         ft.Text("Encontre sua próxima partida", size=15, weight=ft.FontWeight.BOLD, color=COR_TEXTO),
         ft.ResponsiveRow([
             ft.Container(f_local, col={"sm": 12, "md": 4}),
             ft.Container(f_data, col={"sm": 6, "md": 3}),
             ft.Container(f_esporte, col={"sm": 6, "md": 2}),
-            ft.Container(f_periodo, col={"sm": 6, "md": 2}),
-            ft.Container(f_preco_max, col={"sm": 6, "md": 2}),
+            ft.Container(f_periodo, col={"sm": 6, "md": 3}),
+            ft.Container(f_preco_min, col={"sm": 6, "md": 3}),
+            ft.Container(f_preco_max, col={"sm": 6, "md": 3}),
         ], spacing=10, run_spacing=10),
         ft.ElevatedButton("Buscar Quadras", icon=ft.Icons.SEARCH, on_click=on_buscar,
                           bgcolor=COR_PRIMARIA, color="white", height=44,
