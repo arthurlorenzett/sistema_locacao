@@ -6,10 +6,11 @@ import flet as ft
 from frontend.api_client import (
     api_listar_espacos, api_reservar, api_confirmar_reserva,
     api_minhas_reservas, api_cancelar_reserva,
+    api_favoritos, api_favoritar, api_desfavoritar,
 )
 from frontend.componentes import (
     cabecalho_tela, card, card_espaco, faixa_estatisticas, campo, snack, estrelas_avaliacao,
-    icone_modalidade,
+    icone_modalidade, resumo_horarios,
 )
 from frontend.tema import (
     COR_PRIMARIA, COR_SECUNDARIA, COR_TEXTO, COR_TEXTO_SUAVE, COR_CARD,
@@ -71,6 +72,8 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
                     size=13, color=COR_TEXTO_SUAVE),
             ft.Text(f"Valor: R$ {espaco.get('preco_hora', 0):.0f}/hora",
                     size=13, color=COR_SECUNDARIA, weight=ft.FontWeight.BOLD),
+            *([ft.Text("Funcionamento: " + " · ".join(resumo_horarios(espaco["horarios"])),
+                       size=12, color=COR_TEXTO_SUAVE)] if espaco.get("horarios") else []),
             ft.Row([f_data, f_hora], spacing=8),
             ft.Text("Forma de pagamento:", size=13, color=COR_TEXTO),
             grupo,
@@ -95,14 +98,16 @@ def tela_buscar_espacos(page: ft.Page):
                             options=[ft.dropdown.Option("")] + [ft.dropdown.Option(m) for m in _MODALIDADES])
     f_periodo = ft.Dropdown(label="Horário", width=150,
                             options=[ft.dropdown.Option("")] + [ft.dropdown.Option(p) for p in _PERIODOS])
-    f_preco_max = campo("Preço máx.", width=130)
+    f_preco_min = campo("Preço mín. (R$)", width=150)
+    f_preco_max = campo("Preço máx. (R$)", width=150)
 
     def carregar(_=None):
         filtros = {
             "regiao": (f_local.value or "").strip(),
             "modalidade": f_esporte.value or "",
             "data": (f_data.value or "").strip(),
-            "preco_max": (f_preco_max.value or "").strip(),
+            "preco_min": _valor(f_preco_min),
+            "preco_max": _valor(f_preco_max),
         }
         if f_periodo.value:
             filtros["hora"] = _PERIODOS.get(f_periodo.value, "")
@@ -121,6 +126,8 @@ def tela_buscar_espacos(page: ft.Page):
                     esp,
                     on_reservar=_fazer(esp, lambda e, x: dialogo_reserva(page, x, ao_sucesso=carregar)),
                     on_detalhe=_fazer(esp, lambda e, x: abrir_detalhe(x)),
+                    on_favoritar=alternar_favorito(page, esp),
+                    favorito=esp.get("favorito", False),
                 ))
         page.update()
 
@@ -134,7 +141,7 @@ def tela_buscar_espacos(page: ft.Page):
 
     def mostrar_lista():
         raiz.content = ft.Column([
-            _hero(carregar, f_local, f_data, f_esporte, f_periodo, f_preco_max),
+            _hero(carregar, f_local, f_data, f_esporte, f_periodo, f_preco_min, f_preco_max),
             ft.Container(height=8),
             cabecalho_tela("Locais Disponíveis"),
             ft.Text("Os espaços esportivos mais bem avaliados da sua região",
@@ -150,15 +157,21 @@ def tela_buscar_espacos(page: ft.Page):
     return raiz
 
 
-def _hero(on_buscar, f_local, f_data, f_esporte, f_periodo, f_preco_max):
+def _valor(campo_preco):
+    """Texto do campo de preço aceitando vírgula decimal (ex.: "80,50")."""
+    return (campo_preco.value or "").strip().replace(",", ".")
+
+
+def _hero(on_buscar, f_local, f_data, f_esporte, f_periodo, f_preco_min, f_preco_max):
     barra = card(ft.Column([
         ft.Text("Encontre sua próxima partida", size=15, weight=ft.FontWeight.BOLD, color=COR_TEXTO),
         ft.ResponsiveRow([
             ft.Container(f_local, col={"sm": 12, "md": 4}),
             ft.Container(f_data, col={"sm": 6, "md": 3}),
             ft.Container(f_esporte, col={"sm": 6, "md": 2}),
-            ft.Container(f_periodo, col={"sm": 6, "md": 2}),
-            ft.Container(f_preco_max, col={"sm": 6, "md": 2}),
+            ft.Container(f_periodo, col={"sm": 6, "md": 3}),
+            ft.Container(f_preco_min, col={"sm": 6, "md": 3}),
+            ft.Container(f_preco_max, col={"sm": 6, "md": 3}),
         ], spacing=10, run_spacing=10),
         ft.ElevatedButton("Buscar Quadras", icon=ft.Icons.SEARCH, on_click=on_buscar,
                           bgcolor=COR_PRIMARIA, color="white", height=44,
@@ -173,6 +186,71 @@ def _hero(on_buscar, f_local, f_data, f_esporte, f_periodo, f_preco_max):
     ], spacing=8)
 
     return ft.Column([titulo, ft.Container(height=8), barra], spacing=4)
+
+
+def alternar_favorito(page, espaco, ao_remover=None):
+    """Handler do coração: favorita/desfavorita e troca o ícone no próprio botão."""
+    def handler(e):
+        if espaco.get("favorito"):
+            dados, code = api_desfavoritar(espaco["id"])
+            ok = code == 200
+        else:
+            dados, code = api_favoritar(espaco["id"])
+            ok = code in (200, 201)
+        if not ok:
+            snack(page, dados.get("erro", "Não foi possível atualizar os favoritos."), COR_ERRO)
+            return
+        espaco["favorito"] = not espaco.get("favorito")
+        e.control.icon = ft.Icons.FAVORITE if espaco["favorito"] else ft.Icons.FAVORITE_BORDER
+        e.control.update()
+        snack(page, dados.get("mensagem", "Favoritos atualizados."), COR_SUCESSO)
+        if not espaco["favorito"] and ao_remover:
+            ao_remover()
+    return handler
+
+
+def tela_favoritos(page: ft.Page):
+    """Espaços favoritados pelo locatário, com reserva e detalhe a um clique."""
+    raiz = ft.Container(expand=True)
+    grade = ft.ResponsiveRow(run_spacing=16, spacing=16)
+
+    def carregar():
+        dados, code = api_favoritos()
+        grade.controls.clear()
+        if code != 200:
+            grade.controls.append(_aviso(dados.get("erro", "Erro ao carregar favoritos.")))
+        else:
+            espacos = dados.get("espacos", [])
+            if not espacos:
+                grade.controls.append(_aviso(
+                    "Você ainda não tem favoritos. Toque no coração de um espaço na busca para guardá-lo aqui."))
+            for esp in espacos:
+                grade.controls.append(card_espaco(
+                    esp,
+                    on_reservar=_fazer(esp, lambda e, x: dialogo_reserva(page, x, ao_sucesso=carregar)),
+                    on_detalhe=_fazer(esp, lambda e, x: abrir_detalhe(x)),
+                    on_favoritar=alternar_favorito(page, esp, ao_remover=carregar),
+                    favorito=True,
+                ))
+        page.update()
+
+    def abrir_detalhe(espaco):
+        raiz.content = view_detalhe(
+            page, espaco,
+            on_voltar=mostrar_lista,
+            on_reservar=lambda: dialogo_reserva(page, espaco, ao_sucesso=mostrar_lista),
+        )
+        page.update()
+
+    def mostrar_lista():
+        raiz.content = ft.Column([
+            cabecalho_tela("Meus Favoritos"),
+            ft.Container(content=grade, padding=ft.Padding(0, 12, 0, 12)),
+        ], spacing=8, scroll=ft.ScrollMode.AUTO)
+        carregar()
+
+    mostrar_lista()
+    return raiz
 
 
 def _aviso(texto):

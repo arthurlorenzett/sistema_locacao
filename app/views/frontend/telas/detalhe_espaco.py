@@ -2,7 +2,7 @@
 
 import flet as ft
 
-from frontend.componentes import card, estrelas_avaliacao, icone_modalidade
+from frontend.componentes import card, estrelas_avaliacao, icone_modalidade, resumo_horarios
 from frontend.tema import (
     COR_PRIMARIA, COR_SECUNDARIA, COR_TEXTO, COR_TEXTO_SUAVE, COR_CARD,
 )
@@ -14,6 +14,17 @@ def _info(icone, rotulo, valor):
         ft.Text(f"{rotulo}: ", size=14, weight=ft.FontWeight.W_600, color=COR_TEXTO),
         ft.Text(valor or "—", size=14, color=COR_TEXTO_SUAVE),
     ], spacing=6)
+
+
+def _bloco_horarios(horarios):
+    linhas = resumo_horarios(horarios)
+    if not linhas:
+        return _info(ft.Icons.SCHEDULE, "Horários", "Não informado")
+    return ft.Row([
+        ft.Icon(ft.Icons.SCHEDULE, size=18, color=COR_SECUNDARIA),
+        ft.Text("Horários: ", size=14, weight=ft.FontWeight.W_600, color=COR_TEXTO),
+        ft.Column([ft.Text(l, size=14, color=COR_TEXTO_SUAVE) for l in linhas], spacing=2),
+    ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START)
 
 
 def view_detalhe(page: ft.Page, espaco: dict, on_voltar, on_reservar):
@@ -49,6 +60,7 @@ def view_detalhe(page: ft.Page, espaco: dict, on_voltar, on_reservar):
         _info(ft.Icons.LOCATION_ON_OUTLINED, "Endereço", espaco.get("endereco")),
         _info(ft.Icons.MAP_OUTLINED, "Região", espaco.get("regiao")),
         _info(ft.Icons.PAYMENTS_OUTLINED, "Pagamento", " / ".join(pagamentos) or "—"),
+        _bloco_horarios(espaco.get("horarios")),
         ft.Text(espaco.get("descricao") or "", size=14, color=COR_TEXTO_SUAVE),
         ft.Container(height=8),
         ft.ElevatedButton("Reservar Agora", icon=ft.Icons.CALENDAR_MONTH,

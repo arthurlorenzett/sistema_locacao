@@ -105,6 +105,20 @@ def api_desativar_espaco(id):
     return api_delete(f"/espacos/{id}")
 
 
+# --- Favoritos ---
+
+def api_favoritos():
+    return api_get("/favoritos")
+
+
+def api_favoritar(espaco_id):
+    return api_post(f"/favoritos/{espaco_id}", {})
+
+
+def api_desfavoritar(espaco_id):
+    return api_delete(f"/favoritos/{espaco_id}")
+
+
 # --- Reservas ---
 
 def api_reservar(espaco_id, data_horario, data_fim=None):

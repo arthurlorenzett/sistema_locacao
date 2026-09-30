@@ -4,8 +4,10 @@ Facilita a importação em lote das tabelas pelo ecossistema do Flask e do Migra
 """
 
 from app.models.usuario_model import Usuario, Locatario, Locador, Administrador
+from app.models.horario_funcionamento_model import HorarioFuncionamento
 from app.models.espaco_esportivo_model import EspacoEsportivo
 from app.models.reserva_model import Reserva
+from app.models.favorito_model import Favorito
 
 __all__ = [
     "Usuario",
@@ -13,5 +15,7 @@ __all__ = [
     "Locador",
     "Administrador",
     "EspacoEsportivo",
+    "HorarioFuncionamento",
     "Reserva",
+    "Favorito",
 ]
