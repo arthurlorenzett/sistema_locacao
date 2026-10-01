@@ -4,36 +4,23 @@ Listagem/detalhe são públicos (catálogo do cliente); criação/edição/desat
 exigem perfil de locador (dono do espaço) ou administrador.
 """
 
-from datetime import timedelta
+from datetime import datetime
 
 from flask import Blueprint, request, jsonify, g
 
 from app import db
 from app.models.espaco_esportivo_model import EspacoEsportivo
-from app.models.reserva_model import Reserva
 from app.auth.decorators import requer_perfil, login_obrigatorio, usuario_do_token
-from app.routes.favorito_routes import ids_favoritos
-from app.services import validacao
+from app.services import agenda, validacao
+from app.services.catalogo import dict_catalogo, ids_favoritos
 
 espaco_bp = Blueprint('espaco_bp', __name__)
-
-# Duração padrão de um slot quando a reserva não tem data_fim definida.
-_SLOT_PADRAO = timedelta(hours=1)
-
-
-def _espaco_ocupado_em(espaco_id, alvo):
-    """True se há reserva confirmada sobrepondo o instante `alvo`."""
-    confirmadas = Reserva.query.filter_by(espaco_id=espaco_id, status_texto="Confirmada").all()
-    for r in confirmadas:
-        fim = r.data_fim or (r.data_horario + _SLOT_PADRAO)
-        if r.data_horario <= alvo < fim:
-            return True
-    return False
 
 
 @espaco_bp.route('', methods=['GET'], strict_slashes=False)
 def listar_espacos():
-    """Catálogo com filtros: regiao, modalidade, tipo_quadra, preco_min/max, data+hora."""
+    """Catálogo com filtros: regiao, modalidade, tipo_quadra, preco_min/max, data+hora,
+    disponivel_hoje (só espaços com algum horário livre hoje)."""
     try:
         pmin, pmax = validacao.faixa_preco(request.args.get('preco_min'),
                                            request.args.get('preco_max'))
@@ -67,17 +54,17 @@ def listar_espacos():
             alvo = validacao.parse_datetime(f"{data}T{hora}")
         except ValueError as e:
             return jsonify({"erro": str(e)}), 400
-        espacos = [e for e in espacos
-                   if e.atende(alvo, alvo + _SLOT_PADRAO) and not _espaco_ocupado_em(e.id, alvo)]
+        espacos = [e for e in espacos if agenda.livre(e, alvo, alvo + agenda.DURACAO_SLOT)]
 
     # Catálogo é público; se quem pede é um locatário logado, marca os favoritos dele.
     usuario, _erro, _status = usuario_do_token()
     favoritos = ids_favoritos(usuario.id) if usuario and usuario.tipo_usuario == 'locatario' else set()
 
-    return jsonify({
-        "espacos": [dict(e.to_dict(), favorito=e.id in favoritos) for e in espacos],
-        "total": len(espacos),
-    }), 200
+    itens = [dict_catalogo(e, favoritos) for e in espacos]
+    if request.args.get('disponivel_hoje') in ('1', 'true'):
+        itens = [i for i in itens if i["livre_hoje"]]
+
+    return jsonify({"espacos": itens, "total": len(itens)}), 200
 
 
 @espaco_bp.route('/meus', methods=['GET'], strict_slashes=False)
@@ -85,7 +72,7 @@ def listar_espacos():
 def meus_espacos():
     """Lista os espaços do locador autenticado (inclui inativos)."""
     espacos = EspacoEsportivo.query.filter_by(locador_id=g.usuario.id).all()
-    return jsonify({"espacos": [e.to_dict() for e in espacos], "total": len(espacos)}), 200
+    return jsonify({"espacos": [dict_catalogo(e) for e in espacos], "total": len(espacos)}), 200
 
 
 @espaco_bp.route('/<int:id>', methods=['GET'])
@@ -94,6 +81,36 @@ def detalhar_espaco(id):
     if not espaco:
         return jsonify({"erro": "Espaço não encontrado."}), 404
     return jsonify(espaco.to_dict()), 200
+
+
+@espaco_bp.route('/<int:id>/disponibilidade', methods=['GET'])
+def disponibilidade(id):
+    """Horários do dia (?data=AAAA-MM-DD, padrão hoje) com o que está livre para reservar."""
+    espaco = EspacoEsportivo.query.get(id)
+    if not espaco or not espaco.ativo:
+        return jsonify({"erro": "Espaço não encontrado."}), 404
+
+    texto = (request.args.get('data') or '').strip()
+    try:
+        data = datetime.strptime(texto, "%Y-%m-%d").date() if texto else validacao.agora().date()
+    except ValueError:
+        return jsonify({"erro": "Data inválida (use AAAA-MM-DD)."}), 400
+
+    horario = espaco.horario_do_dia(data.weekday())
+    if not espaco.horarios:
+        funcionamento = "Horário não informado"
+    elif horario:
+        d = horario.to_dict()
+        funcionamento = f"{d['abre']}–{d['fecha']}"
+    else:
+        funcionamento = None
+
+    return jsonify({
+        "data": data.isoformat(),
+        "dia_semana": data.weekday(),
+        "funcionamento": funcionamento,
+        "horarios": agenda.grade_do_dia(espaco, data),
+    }), 200
 
 
 @espaco_bp.route('', methods=['POST'], strict_slashes=False)
