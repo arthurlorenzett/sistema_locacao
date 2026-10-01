@@ -38,3 +38,31 @@ def test_pode_reservar_horas_seguidas_livres():
 def test_periodo_da_reserva_e_meia_noite_vira_o_dia_seguinte():
     assert periodo_reserva(date(2026, 10, 10), GRADE, 0, 1) == ("2026-10-10T20:00", "2026-10-10T21:00")
     assert periodo_reserva(date(2026, 10, 10), GRADE, 2, 2) == ("2026-10-10T22:00", "2026-10-11T00:00")
+
+
+# --- descrição dos bloqueios na tela do locador ---
+
+from frontend.agenda import descrever_bloqueio  # noqa: E402
+
+
+def _b(inicio, fim):
+    return {"inicio": inicio, "fim": fim}
+
+
+def test_descreve_dia_inteiro():
+    assert descrever_bloqueio(_b("2026-10-06T00:00:00", "2026-10-07T00:00:00")) == "Ter 06/10 · dia inteiro"
+
+
+def test_descreve_varios_dias_inteiros():
+    assert (descrever_bloqueio(_b("2026-10-06T00:00:00", "2026-10-09T00:00:00"))
+            == "Ter 06/10 a Qui 08/10 · dias inteiros")
+
+
+def test_descreve_faixa_no_mesmo_dia_e_ate_meia_noite():
+    assert descrever_bloqueio(_b("2026-10-06T09:00:00", "2026-10-06T11:30:00")) == "Ter 06/10 · 09:00–11:30"
+    assert descrever_bloqueio(_b("2026-10-06T20:00:00", "2026-10-07T00:00:00")) == "Ter 06/10 · 20:00–24:00"
+
+
+def test_descreve_periodo_que_atravessa_dias():
+    assert (descrever_bloqueio(_b("2026-10-06T22:00:00", "2026-10-07T02:00:00"))
+            == "Ter 06/10 22:00 → Qua 07/10 02:00")

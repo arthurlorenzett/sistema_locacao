@@ -29,6 +29,8 @@ class ReservaFacade:
         if not espaco.atende(inicio, fim):
             raise ValueError("Este espaço não atende neste horário. "
                              + espaco.descricao_funcionamento(inicio.weekday()))
+        if agenda.esta_bloqueado(espaco_id, inicio, fim):
+            raise ValueError("Horário indisponível: bloqueado pelo proprietário do espaço.")
 
         # Reserva duplicada (mesmo cliente, espaço e horário ainda ativa).
         duplicada = Reserva.query.filter(

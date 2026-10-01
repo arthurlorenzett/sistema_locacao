@@ -110,6 +110,21 @@ def api_desativar_espaco(id):
     return api_delete(f"/espacos/{id}")
 
 
+# --- Bloqueios de agenda (locador) ---
+
+def api_bloqueios(espaco_id):
+    return api_get(f"/espacos/{espaco_id}/bloqueios")
+
+
+def api_bloquear(espaco_id, dados):
+    """dados: {"data", "dia_inteiro": True} ou {"inicio", "fim"}; "motivo" opcional."""
+    return api_post(f"/espacos/{espaco_id}/bloqueios", dados)
+
+
+def api_remover_bloqueio(espaco_id, bloqueio_id):
+    return api_delete(f"/espacos/{espaco_id}/bloqueios/{bloqueio_id}")
+
+
 # --- Favoritos ---
 
 def api_favoritos():

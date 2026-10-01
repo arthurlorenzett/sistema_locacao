@@ -21,7 +21,7 @@ def rotulo_dia(dia: date, referencia: date) -> str:
         return "Hoje"
     if dia == referencia + timedelta(days=1):
         return "Amanhã"
-    return f"{_DIAS[dia.weekday()]} {dia:%d/%m}"
+    return _dia_curto(dia)
 
 
 def pode_reservar(horarios: list, indice: int, horas: int) -> bool:
@@ -32,10 +32,36 @@ def pode_reservar(horarios: list, indice: int, horas: int) -> bool:
     return all(a["fim"] == b["inicio"] for a, b in zip(trecho, trecho[1:]))
 
 
-def periodo_reserva(dia: date, horarios: list, indice: int, horas: int) -> tuple:
+def periodo_faixa(dia: date, inicio_hhmm: str, fim_hhmm: str) -> tuple:
     """(início, fim) em ISO para a API; um fim "24:00" vira 00:00 do dia seguinte."""
-    inicio = f"{dia.isoformat()}T{horarios[indice]['inicio']}"
-    fim_hhmm = horarios[indice + horas - 1]["fim"]
+    inicio = f"{dia.isoformat()}T{inicio_hhmm}"
     if fim_hhmm == "24:00":
         return inicio, f"{(dia + timedelta(days=1)).isoformat()}T00:00"
     return inicio, f"{dia.isoformat()}T{fim_hhmm}"
+
+
+def periodo_reserva(dia: date, horarios: list, indice: int, horas: int) -> tuple:
+    """Período de `horas` horários seguidos a partir de `indice` (ver periodo_faixa)."""
+    return periodo_faixa(dia, horarios[indice]["inicio"], horarios[indice + horas - 1]["fim"])
+
+
+def _dia_curto(momento) -> str:
+    return f"{_DIAS[momento.weekday()]} {momento:%d/%m}"
+
+
+def descrever_bloqueio(bloqueio: dict) -> str:
+    """Texto curto de um bloqueio: "Ter 06/10 · dia inteiro", "Ter 06/10 · 09:00–11:00"..."""
+    inicio = datetime.fromisoformat(bloqueio["inicio"])
+    fim = datetime.fromisoformat(bloqueio["fim"])
+    meia_noite = datetime.combine(inicio.date(), datetime.min.time())
+
+    if inicio == meia_noite and fim.time() == datetime.min.time():
+        ultimo_dia = fim - timedelta(days=1)
+        if ultimo_dia.date() == inicio.date():
+            return f"{_dia_curto(inicio)} · dia inteiro"
+        return f"{_dia_curto(inicio)} a {_dia_curto(ultimo_dia)} · dias inteiros"
+    if fim == meia_noite + timedelta(days=1):
+        return f"{_dia_curto(inicio)} · {inicio:%H:%M}–24:00"
+    if fim.date() == inicio.date():
+        return f"{_dia_curto(inicio)} · {inicio:%H:%M}–{fim:%H:%M}"
+    return f"{_dia_curto(inicio)} {inicio:%H:%M} → {_dia_curto(fim)} {fim:%H:%M}"

@@ -30,6 +30,7 @@ def create_app():
     from app.routes.reserva_routes import reserva_bp
     from app.routes.espaco_routes import espaco_bp
     from app.routes.favorito_routes import favorito_bp
+    from app.routes.bloqueio_routes import bloqueio_bp
 
     # (Opcional) Importa o main_bp se você for criar uma rota raiz ('/')
     from app.routes.main_routes import main_bp
@@ -40,6 +41,7 @@ def create_app():
     app.register_blueprint(reserva_bp, url_prefix='/reservas')
     app.register_blueprint(espaco_bp, url_prefix='/espacos')
     app.register_blueprint(favorito_bp, url_prefix='/favoritos')
+    app.register_blueprint(bloqueio_bp, url_prefix='/espacos')
 
     _registrar_handlers_erro(app)
 
