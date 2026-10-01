@@ -1,10 +1,13 @@
-"""Telas do perfil Locador: CRUD de espaços e gestão de reservas recebidas."""
+"""Telas do perfil Locador: CRUD de espaços, agenda (bloqueios) e reservas recebidas."""
+
+from datetime import datetime, time, timedelta
 
 import flet as ft
 
+from frontend import agenda
 from frontend.api_client import (
     api_meus_espacos, api_criar_espaco, api_editar_espaco, api_desativar_espaco,
-    api_reservas_recebidas,
+    api_reservas_recebidas, api_bloqueios, api_bloquear, api_remover_bloqueio,
 )
 from frontend.componentes import (
     cabecalho_tela, card, card_espaco, campo, snack, icone_modalidade,
@@ -40,6 +43,8 @@ def tela_meus_espacos(page: ft.Page):
                     acoes_extra=[
                         ft.IconButton(ft.Icons.EDIT, icon_color=COR_SECUNDARIA, tooltip="Editar",
                                       on_click=_capt(esp, lambda e, x: mostrar_form(x))),
+                        ft.IconButton(ft.Icons.EVENT_BUSY, icon_color=COR_AVISO, tooltip="Bloquear horários",
+                                      on_click=_capt(esp, lambda e, x: mostrar_bloqueios(x))),
                         ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color=COR_ERRO, tooltip="Desativar",
                                       on_click=_capt(esp, lambda e, x: _desativar(page, x["id"], carregar))),
                     ],
@@ -60,6 +65,10 @@ def tela_meus_espacos(page: ft.Page):
 
     def mostrar_form(espaco):
         raiz.content = _form_espaco(page, espaco, on_voltar=mostrar_lista, ao_salvar=mostrar_lista)
+        page.update()
+
+    def mostrar_bloqueios(espaco):
+        raiz.content = _tela_bloqueios(page, espaco, on_voltar=mostrar_lista)
         page.update()
 
     mostrar_lista()
@@ -141,6 +150,12 @@ def _form_espaco(page, espaco, on_voltar, ao_salvar):
     ], spacing=8, scroll=ft.ScrollMode.AUTO)
 
 
+def _dropdown_hora(valor, desabilitado=False):
+    """Seletor de horário de 30 em 30 minutos (00:00 a 24:00)."""
+    return ft.Dropdown(value=valor, width=110, dense=True, menu_height=300, disabled=desabilitado,
+                       options=[ft.dropdown.Option(h) for h in _HORAS])
+
+
 def _editor_horarios(page, horarios):
     """Grade semanal editável: um dia por linha (marcar = aberto) com abertura e fechamento.
 
@@ -149,10 +164,6 @@ def _editor_horarios(page, horarios):
     """
     existentes = {h["dia_semana"]: h for h in (horarios or [])}
     linhas = []  # (checkbox, dropdown_abre, dropdown_fecha)
-
-    def _dropdown(valor, desabilitado):
-        return ft.Dropdown(value=valor, width=110, dense=True, menu_height=300, disabled=desabilitado,
-                           options=[ft.dropdown.Option(h) for h in _HORAS])
 
     def _ao_marcar(abre, fecha):
         def handler(ev):
@@ -164,8 +175,8 @@ def _editor_horarios(page, horarios):
         h = existentes.get(dia)
         # Espaço sem grade (novo ou antigo): sugere todos os dias abertos das 08:00 às 22:00.
         aberto = bool(h) if existentes else True
-        abre = _dropdown(h["abre"] if h else "08:00", not aberto)
-        fecha = _dropdown(h["fecha"] if h else "22:00", not aberto)
+        abre = _dropdown_hora(h["abre"] if h else "08:00", not aberto)
+        fecha = _dropdown_hora(h["fecha"] if h else "22:00", not aberto)
         chk = ft.Checkbox(label=nome, value=aberto, width=120, on_change=_ao_marcar(abre, fecha))
         linhas.append((chk, abre, fecha))
 
@@ -202,6 +213,119 @@ def _editor_horarios(page, horarios):
           for chk, abre, fecha in linhas],
     ], spacing=6)
     return controle, coletar
+
+
+def _tela_bloqueios(page, espaco, on_voltar):
+    """Agenda do espaço: bloqueia um dia inteiro ou uma faixa de horário e lista os bloqueios ativos."""
+    hoje = agenda.hoje()
+    estado = {"dia": hoje}
+    lista = ft.Column(spacing=8)
+    txt_dia = ft.Text(size=14, weight=ft.FontWeight.W_600, color=COR_TEXTO)
+    c_dia_inteiro = ft.Checkbox(label="Dia inteiro", value=True)
+    f_inicio = _dropdown_hora("08:00", desabilitado=True)
+    f_fim = _dropdown_hora("12:00", desabilitado=True)
+    f_motivo = campo("Motivo (só você vê)", hint="Ex.: manutenção do gramado", width=360)
+
+    def mostrar_dia():
+        txt_dia.value = f"{agenda.rotulo_dia(estado['dia'], hoje)} ({estado['dia']:%d/%m/%Y})"
+
+    def ao_marcar_dia_inteiro(e):
+        f_inicio.disabled = f_fim.disabled = c_dia_inteiro.value
+        page.update()
+
+    c_dia_inteiro.on_change = ao_marcar_dia_inteiro
+
+    def ao_escolher_data(e):
+        valor = e.control.value
+        if valor:
+            estado["dia"] = valor.date() if isinstance(valor, datetime) else valor
+            mostrar_dia()
+            page.update()
+
+    def abrir_calendario(_):
+        # Um seletor novo a cada abertura: show_dialog recusa um diálogo que já está na pilha.
+        page.show_dialog(ft.DatePicker(
+            value=datetime.combine(estado["dia"], time()),
+            first_date=datetime.combine(hoje, time()),
+            last_date=datetime.combine(hoje + timedelta(days=365), time()),
+            help_text="Dia do bloqueio", cancel_text="Cancelar", confirm_text="OK",
+            on_change=ao_escolher_data,
+        ))
+
+    def carregar():
+        dados, code = api_bloqueios(espaco["id"])
+        lista.controls.clear()
+        if code != 200:
+            lista.controls.append(ft.Text(dados.get("erro", "Erro ao carregar bloqueios."), color=COR_ERRO))
+        elif not dados.get("bloqueios"):
+            lista.controls.append(ft.Text(
+                "Nenhum bloqueio ativo: a agenda segue o horário de funcionamento.", color=COR_TEXTO_SUAVE))
+        for b in dados.get("bloqueios", []) if code == 200 else []:
+            lista.controls.append(ft.Container(
+                content=ft.Row([
+                    ft.Icon(ft.Icons.EVENT_BUSY, color=COR_AVISO, size=26),
+                    ft.Column([
+                        ft.Text(agenda.descrever_bloqueio(b), weight=ft.FontWeight.BOLD, size=14, color=COR_TEXTO),
+                        ft.Text(b.get("motivo") or "Sem motivo informado", size=12, color=COR_TEXTO_SUAVE),
+                    ], spacing=2, expand=True),
+                    ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color=COR_ERRO, tooltip="Remover bloqueio",
+                                  on_click=_capt(b, lambda e, x: remover(x))),
+                ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                bgcolor=COR_CARD, border_radius=12, padding=ft.Padding(16, 10, 8, 10),
+                shadow=ft.BoxShadow(blur_radius=6, color="#1118271A"),
+            ))
+        page.update()
+
+    def bloquear(_):
+        payload = {"motivo": (f_motivo.value or "").strip()}
+        if c_dia_inteiro.value:
+            payload.update(data=estado["dia"].isoformat(), dia_inteiro=True)
+        else:
+            # "HH:MM" com zero à esquerda: a comparação de texto equivale à de horário.
+            if not f_inicio.value or not f_fim.value or f_fim.value <= f_inicio.value:
+                snack(page, "O fim do bloqueio deve ser depois do início.", COR_AVISO)
+                return
+            payload["inicio"], payload["fim"] = agenda.periodo_faixa(estado["dia"], f_inicio.value, f_fim.value)
+        dados, code = api_bloquear(espaco["id"], payload)
+        if code == 201:
+            snack(page, dados.get("mensagem", "Horário bloqueado."), COR_SUCESSO)
+            f_motivo.value = ""
+            carregar()
+        else:
+            snack(page, dados.get("erro", "Não foi possível bloquear."), COR_ERRO)
+
+    def remover(bloqueio):
+        dados, code = api_remover_bloqueio(espaco["id"], bloqueio["id"])
+        if code == 200:
+            snack(page, dados.get("mensagem", "Bloqueio removido."), COR_SUCESSO)
+            carregar()
+        else:
+            snack(page, dados.get("erro", "Não foi possível remover."), COR_ERRO)
+
+    mostrar_dia()
+    formulario = card(ft.Column([
+        ft.Text("Novo bloqueio", size=15, weight=ft.FontWeight.BOLD, color=COR_TEXTO),
+        ft.Row([txt_dia, ft.OutlinedButton("Escolher data", icon=ft.Icons.CALENDAR_MONTH,
+                                           on_click=abrir_calendario)], spacing=12, wrap=True),
+        c_dia_inteiro,
+        ft.Row([f_inicio, ft.Text("às", color=COR_TEXTO_SUAVE), f_fim], spacing=10,
+               vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        f_motivo,
+        ft.ElevatedButton("Bloquear", icon=ft.Icons.BLOCK, on_click=bloquear,
+                          bgcolor=COR_ERRO, color="white", height=42),
+    ], spacing=10))
+
+    carregar()
+    return ft.Column([
+        ft.TextButton("Voltar", icon=ft.Icons.ARROW_BACK, on_click=lambda e: on_voltar()),
+        cabecalho_tela(f"Agenda — {espaco.get('nome', '')}"),
+        ft.Text("Horários bloqueados deixam de aparecer para os clientes e não aceitam reservas. "
+                "Para bloquear um período que já tem reserva, cancele a reserva antes.",
+                size=13, color=COR_TEXTO_SUAVE),
+        formulario,
+        ft.Text("Bloqueios ativos", size=15, weight=ft.FontWeight.BOLD, color=COR_TEXTO),
+        lista,
+    ], spacing=10, scroll=ft.ScrollMode.AUTO)
 
 
 def _desativar(page, espaco_id, recarregar):

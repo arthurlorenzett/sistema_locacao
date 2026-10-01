@@ -1,4 +1,4 @@
-"""Agenda dos espaços: o que está ocupado e quais horários de um dia estão livres.
+"""Agenda dos espaços: o que está ocupado/bloqueado e quais horários de um dia estão livres.
 
 É o único lugar que decide se um período está livre — usado pela reserva
 (fachada), pela busca do catálogo e pela grade de horários exibida ao cliente.
@@ -6,6 +6,7 @@
 
 from datetime import datetime, time, timedelta
 
+from app.models.bloqueio_model import Bloqueio
 from app.models.reserva_model import Reserva
 from app.services import validacao
 
@@ -17,15 +18,15 @@ DURACAO_SLOT = timedelta(hours=1)
 _JANELA_PADRAO = (8 * 60, 22 * 60)
 
 
-def periodos_reservados(espaco_id, inicio, fim, ignorar_reserva_id=None):
-    """Períodos (inicio, fim) de reservas confirmadas que se sobrepõem a [inicio, fim)."""
-    confirmadas = Reserva.query.filter(
+def periodos_reservados(espaco_id, inicio, fim, ignorar_reserva_id=None, status=("Confirmada",)):
+    """Períodos (inicio, fim) de reservas (por padrão, só confirmadas) que se sobrepõem a [inicio, fim)."""
+    reservas = Reserva.query.filter(
         Reserva.espaco_id == espaco_id,
-        Reserva.status_texto == "Confirmada",
+        Reserva.status_texto.in_(status),
         Reserva.data_horario < fim,
     ).all()
     periodos = []
-    for r in confirmadas:
+    for r in reservas:
         if r.id == ignorar_reserva_id:
             continue
         r_fim = r.data_fim or (r.data_horario + DURACAO_SLOT)
@@ -38,9 +39,22 @@ def esta_reservado(espaco_id, inicio, fim, ignorar_reserva_id=None) -> bool:
     return bool(periodos_reservados(espaco_id, inicio, fim, ignorar_reserva_id))
 
 
+def bloqueios_no_periodo(espaco_id, inicio, fim):
+    """Bloqueios do locador que se sobrepõem a [inicio, fim)."""
+    return Bloqueio.query.filter(
+        Bloqueio.espaco_id == espaco_id, Bloqueio.inicio < fim, Bloqueio.fim > inicio,
+    ).order_by(Bloqueio.inicio).all()
+
+
+def esta_bloqueado(espaco_id, inicio, fim) -> bool:
+    return bool(bloqueios_no_periodo(espaco_id, inicio, fim))
+
+
 def livre(espaco, inicio, fim) -> bool:
-    """O espaço atende nesse período e não há reserva confirmada nele."""
-    return espaco.atende(inicio, fim) and not esta_reservado(espaco.id, inicio, fim)
+    """O espaço atende nesse período, que não está bloqueado nem reservado."""
+    return (espaco.atende(inicio, fim)
+            and not esta_bloqueado(espaco.id, inicio, fim)
+            and not esta_reservado(espaco.id, inicio, fim))
 
 
 def _janela(espaco, data):
@@ -58,7 +72,7 @@ def _hhmm(momento, meia_noite):
 def grade_do_dia(espaco, data):
     """Horários de uma hora dentro do funcionamento do dia, com o motivo de estar indisponível.
 
-    motivo: None (livre) | "passado" (já começou) | "reservado".
+    motivo: None (livre) | "passado" (já começou) | "bloqueado" (pelo locador) | "reservado".
     """
     janela = _janela(espaco, data)
     if not janela:
@@ -67,6 +81,7 @@ def grade_do_dia(espaco, data):
     abre = meia_noite + timedelta(minutes=janela[0])
     fecha = meia_noite + timedelta(minutes=janela[1])
     reservados = periodos_reservados(espaco.id, abre, fecha)
+    bloqueados = [(b.inicio, b.fim) for b in bloqueios_no_periodo(espaco.id, abre, fecha)]
     agora = validacao.agora()
 
     horarios, inicio = [], abre
@@ -74,6 +89,8 @@ def grade_do_dia(espaco, data):
         fim = inicio + DURACAO_SLOT
         if inicio < agora:
             motivo = "passado"
+        elif any(b_ini < fim and inicio < b_fim for b_ini, b_fim in bloqueados):
+            motivo = "bloqueado"
         elif any(r_ini < fim and inicio < r_fim for r_ini, r_fim in reservados):
             motivo = "reservado"
         else:

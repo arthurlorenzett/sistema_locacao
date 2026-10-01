@@ -8,6 +8,7 @@ from app.models.horario_funcionamento_model import HorarioFuncionamento
 from app.models.espaco_esportivo_model import EspacoEsportivo
 from app.models.reserva_model import Reserva
 from app.models.favorito_model import Favorito
+from app.models.bloqueio_model import Bloqueio
 
 __all__ = [
     "Usuario",
@@ -18,4 +19,5 @@ __all__ = [
     "HorarioFuncionamento",
     "Reserva",
     "Favorito",
+    "Bloqueio",
 ]

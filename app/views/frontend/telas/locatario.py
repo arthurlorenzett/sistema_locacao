@@ -25,7 +25,8 @@ _MODALIDADES = ["Futebol", "Futsal", "Tênis", "Vôlei", "Basquete", "Beach Tên
 _PERIODOS = {"Manhã": "09:00", "Tarde": "14:00", "Noite": "19:00"}
 _DURACOES = {"1": "1 hora", "2": "2 horas", "3": "3 horas"}
 # Por que um horário aparece desativado na grade do diálogo de reserva.
-_MOTIVOS = {"passado": "Horário já passou", "reservado": "Já reservado"}
+_MOTIVOS = {"passado": "Horário já passou", "reservado": "Já reservado",
+            "bloqueado": "Indisponível (fechado pelo local)"}
 _COR_SELECAO = "#A7F3D0"  # verde claro para o dia/horário escolhido
 
 
