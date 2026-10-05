@@ -11,7 +11,7 @@ from frontend.api_client import (
 )
 from frontend.componentes import (
     cabecalho_tela, card, card_espaco, faixa_estatisticas, campo, snack, estrelas_avaliacao,
-    icone_modalidade, descricao_confianca,
+    icone_modalidade, descricao_confianca, moeda, texto_preco,
 )
 from frontend.tema import (
     COR_PRIMARIA, COR_SECUNDARIA, COR_TEXTO, COR_TEXTO_SUAVE, COR_CARD,
@@ -36,7 +36,6 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
     """Diálogo de reserva: escolhe o dia, um horário livre, a duração e o pagamento."""
     dia_hoje = agenda.hoje()
     estado = {"dia": dia_hoje, "horarios": [], "indice": None}
-    preco = float(espaco.get("preco_hora") or 0)
 
     linha_dias = ft.Row(spacing=6, scroll=ft.ScrollMode.AUTO)
     grade_horarios = ft.Row(spacing=6, run_spacing=6, wrap=True)
@@ -66,7 +65,7 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
             return
         fim = horarios[i + horas - 1]["fim"]
         resumo.value = (f"{agenda.rotulo_dia(estado['dia'], dia_hoje)} · {horarios[i]['inicio']}–{fim}"
-                        f" · R$ {preco * horas:.0f}")
+                        f" · {moeda(agenda.valor_reserva(horarios, i, horas))}")
         resumo.color = COR_SECUNDARIA
 
     def desenhar():
@@ -75,8 +74,11 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
                     show_checkmark=False, selected_color=_COR_SELECAO, on_select=_escolher_dia(d))
             for d in agenda.proximos_dias(dia_hoje)
         ]
+        # Com preços por horário, cada opção mostra o seu valor.
+        varia = len({h.get("preco") for h in estado["horarios"]}) > 1
         grade_horarios.controls = [
-            ft.Chip(label=ft.Text(h["inicio"]), selected=i == estado["indice"], show_checkmark=False,
+            ft.Chip(label=ft.Text(f"{h['inicio']} · {moeda(h['preco'])}" if varia else h["inicio"]),
+                    selected=i == estado["indice"], show_checkmark=False,
                     selected_color=_COR_SELECAO, disabled=not h["disponivel"],
                     tooltip=_MOTIVOS.get(h.get("motivo")), on_select=_escolher_horario(i))
             for i, h in enumerate(estado["horarios"])
@@ -147,7 +149,7 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
         modal=True,
         title=ft.Text(f"Reservar — {espaco.get('nome', '')}", color=COR_TEXTO),
         content=ft.Column([
-            ft.Text(f"{espaco.get('modalidade') or espaco.get('tipo_esporte')} · R$ {preco:.0f}/hora",
+            ft.Text(f"{espaco.get('modalidade') or espaco.get('tipo_esporte')} · {texto_preco(espaco)}",
                     size=13, color=COR_TEXTO_SUAVE),
             ft.Text("Dia", size=13, weight=ft.FontWeight.W_600, color=COR_TEXTO),
             linha_dias,
@@ -473,7 +475,8 @@ def _card_reserva(page, r, recarregar, permitir_cancelar=False, permitir_confirm
         ft.Text(r.get("espaco_nome") or f"Espaço #{r.get('espaco_id')}",
                 weight=ft.FontWeight.BOLD, size=15, color=COR_TEXTO),
         ft.Text(quando, size=12, color=COR_TEXTO_SUAVE),
-        ft.Text(f"Pagamento: {r.get('status_pagamento') or '—'}"
+        ft.Text((f"Valor: {moeda(r['valor_total'])} · " if r.get("valor_total") is not None else "")
+                + f"Pagamento: {r.get('status_pagamento') or '—'}"
                 + (f" ({r.get('metodo_pagamento')})" if r.get('metodo_pagamento') else ""),
                 size=12, color=COR_TEXTO_SUAVE),
     ]

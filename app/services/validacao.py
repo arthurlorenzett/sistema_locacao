@@ -129,6 +129,36 @@ def validar_horarios(horarios) -> list:
     return sorted(resultado)
 
 
+def validar_regras_preco(regras) -> list:
+    """Valida as regras de preço por horário (a lista pode ser vazia).
+
+    Recebe `[{"dias": [0-6, ...], "inicio": "HH:MM", "fim": "HH:MM", "preco_hora": n}, ...]`
+    e devolve uma linha por dia: `[(dia, inicio_min, fim_min, preco), ...]`.
+    """
+    if not isinstance(regras, list):
+        raise ValueError("Regras de preço inválidas.")
+    linhas = []
+    for regra in regras:
+        if not isinstance(regra, dict):
+            raise ValueError("Regras de preço inválidas.")
+        dias = regra.get("dias")
+        if not isinstance(dias, list) or not dias:
+            raise ValueError("Cada regra de preço precisa de ao menos um dia da semana.")
+        if any(isinstance(d, bool) or not isinstance(d, int) or not 0 <= d <= 6 for d in dias):
+            raise ValueError("Dia da semana inválido.")
+        inicio, fim = parse_hora(regra.get("inicio")), parse_hora(regra.get("fim"))
+        if fim <= inicio:
+            raise ValueError("Na regra de preço, o fim deve ser depois do início.")
+        preco = validar_preco(regra.get("preco_hora"))
+        linhas.extend((dia, inicio, fim, preco) for dia in set(dias))
+
+    linhas.sort()
+    for (dia_a, _, fim_a, _), (dia_b, inicio_b, _, _) in zip(linhas, linhas[1:]):
+        if dia_a == dia_b and inicio_b < fim_a:
+            raise ValueError("Há regras de preço sobrepostas no mesmo dia: cada horário só pode ter um preço.")
+    return linhas
+
+
 def faixa_preco(preco_min, preco_max):
     """Normaliza filtros de faixa de preço (qualquer um pode ser None)."""
     def _num(v):

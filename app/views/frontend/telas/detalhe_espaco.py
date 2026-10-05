@@ -5,6 +5,7 @@ import flet as ft
 from frontend.api_client import api_avaliacoes
 from frontend.componentes import (
     card, estrelas_avaliacao, icone_modalidade, resumo_horarios, data_br, texto_total_avaliacoes,
+    texto_preco, resumo_regras_preco, moeda,
 )
 from frontend.tema import (
     COR_PRIMARIA, COR_SECUNDARIA, COR_TEXTO, COR_TEXTO_SUAVE, COR_CARD,
@@ -28,6 +29,19 @@ def _bloco_horarios(horarios):
         ft.Text("Horários: ", size=14, weight=ft.FontWeight.W_600, color=COR_TEXTO),
         ft.Column([ft.Text(l, size=14, color=COR_TEXTO_SUAVE) for l in linhas], spacing=2),
     ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START)
+
+
+def _bloco_precos(espaco):
+    """Preço padrão e as regras por horário (só aparece se o espaço tiver regras)."""
+    regras = espaco.get("regras_preco")
+    if not regras:
+        return []
+    linhas = [f"Padrão: {moeda(espaco.get('preco_hora') or 0)}/hora", *resumo_regras_preco(regras)]
+    return [ft.Row([
+        ft.Icon(ft.Icons.SELL_OUTLINED, size=18, color=COR_SECUNDARIA),
+        ft.Text("Preços: ", size=14, weight=ft.FontWeight.W_600, color=COR_TEXTO),
+        ft.Column([ft.Text(l, size=14, color=COR_TEXTO_SUAVE) for l in linhas], spacing=2),
+    ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START)]
 
 
 def _bloco_avaliacoes(espaco_id):
@@ -61,7 +75,6 @@ def _bloco_avaliacoes(espaco_id):
 def view_detalhe(page: ft.Page, espaco: dict, on_voltar, on_reservar):
     """Constrói o conteúdo de detalhe. `on_voltar`/`on_reservar` são callbacks."""
     modalidade = espaco.get("modalidade") or espaco.get("tipo_esporte") or ""
-    preco = espaco.get("preco_hora", 0)
 
     if espaco.get("foto_url"):
         topo = ft.Container(
@@ -82,7 +95,7 @@ def view_detalhe(page: ft.Page, espaco: dict, on_voltar, on_reservar):
         ft.Row([
             ft.Text(espaco.get("nome", "—"), size=24, weight=ft.FontWeight.BOLD, color=COR_TEXTO),
             ft.Container(expand=True),
-            ft.Text(f"R$ {preco:.0f}/hora", size=20, weight=ft.FontWeight.BOLD, color=COR_SECUNDARIA),
+            ft.Text(texto_preco(espaco), size=20, weight=ft.FontWeight.BOLD, color=COR_SECUNDARIA),
         ]),
         estrelas_avaliacao(espaco.get("nota_media")) if espaco.get("nota_media") else ft.Container(),
         ft.Divider(),
@@ -92,6 +105,7 @@ def view_detalhe(page: ft.Page, espaco: dict, on_voltar, on_reservar):
         _info(ft.Icons.MAP_OUTLINED, "Região", espaco.get("regiao")),
         _info(ft.Icons.PAYMENTS_OUTLINED, "Pagamento", " / ".join(pagamentos) or "—"),
         _bloco_horarios(espaco.get("horarios")),
+        *_bloco_precos(espaco),
         ft.Text(espaco.get("descricao") or "", size=14, color=COR_TEXTO_SUAVE),
         ft.Container(height=8),
         ft.ElevatedButton("Reservar Agora", icon=ft.Icons.CALENDAR_MONTH,

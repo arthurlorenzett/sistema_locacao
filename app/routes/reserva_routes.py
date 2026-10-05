@@ -26,6 +26,10 @@ def _reserva_dict(reserva, espaco=None, avaliacao=None):
         dados["espaco_modalidade"] = espaco.tipo_esporte
         dados["espaco_endereco"] = espaco.endereco
         dados["preco_hora"] = espaco.preco_hora
+        if dados["valor_total"] is None:
+            # Reserva anterior aos preços por horário: vale o preço padrão do espaço.
+            horas = (reserva.fim_efetivo - reserva.data_horario).total_seconds() / 3600
+            dados["valor_total"] = round(espaco.preco_hora * horas, 2)
     dados["pode_cancelar"] = (reserva.status_texto in ("Pendente", "Confirmada")
                               and reserva.fim_efetivo > validacao.agora())
     dados["avaliacao"] = avaliacao.resumo() if avaliacao else None
@@ -71,6 +75,7 @@ def realizar_reserva():
             "mensagem": "Pedido de reserva realizado com sucesso!",
             "reserva_id": nova.id,
             "status": nova.status_texto,
+            "valor_total": nova.valor_total,
         }), 201
     except ValueError as e:
         print("ERRO RESERVA:", str(e))

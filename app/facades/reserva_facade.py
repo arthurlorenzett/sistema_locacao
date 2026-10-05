@@ -7,7 +7,7 @@ e cancelamento — sempre via o padrão State da `Reserva`.
 
 from app.models.reserva_model import Reserva
 from app.models.espaco_esportivo_model import EspacoEsportivo
-from app.services import agenda, avaliacoes, validacao
+from app.services import agenda, avaliacoes, precos, validacao
 from app import db
 
 
@@ -51,6 +51,7 @@ class ReservaFacade:
             espaco_id=espaco_id,
             data_horario=inicio,
             data_fim=fim,
+            valor_total=precos.preco_do_periodo(espaco, inicio, fim),
         )
         db.session.add(nova_reserva)
         db.session.commit()

@@ -8,7 +8,7 @@ from datetime import datetime, time, timedelta
 
 from app.models.bloqueio_model import Bloqueio
 from app.models.reserva_model import Reserva
-from app.services import validacao
+from app.services import precos, validacao
 
 # Duração de cada horário oferecido (e de uma reserva sem término informado).
 DURACAO_SLOT = timedelta(hours=1)
@@ -95,7 +95,8 @@ def grade_do_dia(espaco, data):
         else:
             motivo = None
         horarios.append({"inicio": _hhmm(inicio, meia_noite), "fim": _hhmm(fim, meia_noite),
-                         "disponivel": motivo is None, "motivo": motivo})
+                         "disponivel": motivo is None, "motivo": motivo,
+                         "preco": precos.preco_do_periodo(espaco, inicio, fim)})
         inicio = fim
     return horarios
 
