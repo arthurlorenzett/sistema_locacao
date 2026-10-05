@@ -84,7 +84,7 @@ def _form_espaco(page, espaco, on_voltar, ao_salvar):
                                value=e.get("tipo_esporte") or e.get("modalidade"),
                                options=[ft.dropdown.Option(m) for m in _MODALIDADES])
     f_tipo_quadra = campo("Tipo de quadra", width=200, value=e.get("tipo_quadra") or "")
-    f_preco = campo("Preço por hora", width=160, value=str(e.get("preco_hora") or ""))
+    f_preco = campo("Preço por hora (padrão)", width=200, value=_numero(e.get("preco_hora")))
     f_regiao = campo("Região", width=240, value=e.get("regiao") or "")
     f_endereco = campo("Endereço", width=320, value=e.get("endereco") or "")
     f_foto = campo("URL da foto (opcional)", width=320, value=e.get("foto_url") or "")
@@ -92,6 +92,7 @@ def _form_espaco(page, espaco, on_voltar, ao_salvar):
     c_online = ft.Checkbox(label="Aceita pagamento online", value=e.get("aceita_online", True))
     c_presencial = ft.Checkbox(label="Aceita pagamento presencial", value=e.get("aceita_presencial", True))
     editor_horarios, coletar_horarios = _editor_horarios(page, e.get("horarios"))
+    editor_precos, coletar_precos = _editor_regras_preco(page, e.get("regras_preco"))
 
     def salvar(_):
         if not (f_nome.value or "").strip() or not f_modalidade.value:
@@ -99,6 +100,7 @@ def _form_espaco(page, espaco, on_voltar, ao_salvar):
             return
         try:
             horarios = coletar_horarios()
+            regras_preco = coletar_precos()
         except ValueError as erro:
             snack(page, str(erro), COR_AVISO)
             return
@@ -106,7 +108,7 @@ def _form_espaco(page, espaco, on_voltar, ao_salvar):
             "nome": f_nome.value.strip(),
             "modalidade": f_modalidade.value,
             "tipo_quadra": (f_tipo_quadra.value or "").strip(),
-            "preco_hora": (f_preco.value or "").strip(),
+            "preco_hora": (f_preco.value or "").strip().replace(",", "."),
             "regiao": (f_regiao.value or "").strip(),
             "endereco": (f_endereco.value or "").strip(),
             "foto_url": (f_foto.value or "").strip(),
@@ -114,6 +116,7 @@ def _form_espaco(page, espaco, on_voltar, ao_salvar):
             "aceita_online": c_online.value,
             "aceita_presencial": c_presencial.value,
             "horarios": horarios,
+            "regras_preco": regras_preco,
         }
         if edicao:
             dados, code = api_editar_espaco(e["id"], payload)
@@ -144,6 +147,8 @@ def _form_espaco(page, espaco, on_voltar, ao_salvar):
             ft.Row([c_online, c_presencial], spacing=20),
             ft.Divider(height=16),
             editor_horarios,
+            ft.Divider(height=16),
+            editor_precos,
             ft.ElevatedButton("Salvar", icon=ft.Icons.SAVE, on_click=salvar,
                               bgcolor=COR_PRIMARIA, color="white", height=44),
         ], spacing=12)),
@@ -211,6 +216,75 @@ def _editor_horarios(page, horarios):
         *[ft.Row([chk, abre, ft.Text("às", color=COR_TEXTO_SUAVE), fecha],
                  spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER)
           for chk, abre, fecha in linhas],
+    ], spacing=6)
+    return controle, coletar
+
+
+def _numero(valor) -> str:
+    """Número para campo de texto: 180.0 -> "180"; 82.5 -> "82,5"; None -> ""."""
+    if valor is None:
+        return ""
+    return str(int(valor)) if float(valor) == int(valor) else str(valor).replace(".", ",")
+
+
+def _editor_regras_preco(page, regras):
+    """Regras de preço por dia/horário (opcional): uma linha por regra.
+
+    Devolve (controle, coletar); `coletar()` devolve a lista no formato da API ou
+    levanta ValueError com uma mensagem para o usuário.
+    """
+    lista = ft.Column(spacing=8)
+
+    def adicionar(regra=None, atualizar=True):
+        r = regra or {}
+        dias = [ft.Checkbox(label=nome[:3], value=i in r.get("dias", [])) for i, nome in enumerate(_DIAS)]
+        inicio = _dropdown_hora(r.get("inicio", "18:00"))
+        fim = _dropdown_hora(r.get("fim", "22:00"))
+        preco = campo("R$/hora", width=120, value=_numero(r.get("preco_hora")))
+        linha = ft.Row(wrap=True, spacing=6, run_spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        linha.data = {"dias": dias, "inicio": inicio, "fim": fim, "preco": preco}
+        linha.controls = [
+            *dias, inicio, ft.Text("às", color=COR_TEXTO_SUAVE), fim, preco,
+            ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color=COR_ERRO, tooltip="Remover regra",
+                          on_click=lambda e: remover(linha)),
+        ]
+        lista.controls.append(linha)
+        if atualizar:
+            page.update()
+
+    def remover(linha):
+        lista.controls.remove(linha)
+        page.update()
+
+    for regra in regras or []:
+        adicionar(regra, atualizar=False)
+
+    def coletar():
+        resultado = []
+        for n, linha in enumerate(lista.controls, start=1):
+            c = linha.data
+            dias = [i for i, chk in enumerate(c["dias"]) if chk.value]
+            if not dias:
+                raise ValueError(f"Regra de preço {n}: marque ao menos um dia.")
+            # "HH:MM" com zero à esquerda: a comparação de texto equivale à de horário.
+            if not c["inicio"].value or not c["fim"].value or c["fim"].value <= c["inicio"].value:
+                raise ValueError(f"Regra de preço {n}: o fim deve ser depois do início.")
+            try:
+                preco = float((c["preco"].value or "").strip().replace(",", "."))
+            except ValueError:
+                preco = 0
+            if preco <= 0:
+                raise ValueError(f"Regra de preço {n}: informe um preço válido.")
+            resultado.append({"dias": dias, "inicio": c["inicio"].value, "fim": c["fim"].value,
+                              "preco_hora": preco})
+        return resultado
+
+    controle = ft.Column([
+        ft.Text("Preços por horário (opcional)", size=15, weight=ft.FontWeight.BOLD, color=COR_TEXTO),
+        ft.Text("Fora das regras vale o preço por hora padrão. Ex.: sábado e domingo à noite mais caro.",
+                size=12, color=COR_TEXTO_SUAVE),
+        lista,
+        ft.TextButton("Adicionar regra de preço", icon=ft.Icons.ADD, on_click=lambda e: adicionar()),
     ], spacing=6)
     return controle, coletar
 

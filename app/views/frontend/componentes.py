@@ -80,6 +80,42 @@ def texto_hoje(horarios, dia_semana):
     return f"Hoje: {h['abre']}–{h['fecha']}" if h else "Hoje: fechado"
 
 
+def moeda(valor) -> str:
+    """120 -> "R$ 120"; 82.5 -> "R$ 82,50"."""
+    valor = float(valor)
+    return f"R$ {valor:.0f}" if valor == int(valor) else f"R$ {valor:.2f}".replace(".", ",")
+
+
+def rotulo_dias(dias) -> str:
+    """[0, 1, 2, 3, 4] -> "Seg a Sex"; [5, 6] -> "Sáb e Dom"; [0, 2, 4] -> "Seg, Qua e Sex"."""
+    dias = sorted(set(dias))
+    if len(dias) == 7:
+        return "Todos os dias"
+    nomes = [_DIAS_CURTOS[d] for d in dias]
+    if len(dias) == 1:
+        return nomes[0]
+    if len(dias) >= 3 and dias == list(range(dias[0], dias[-1] + 1)):
+        return f"{nomes[0]} a {nomes[-1]}"
+    return ", ".join(nomes[:-1]) + " e " + nomes[-1]
+
+
+def texto_preco(espaco) -> str:
+    """"R$ 120/hora" ou, havendo preços por horário, a faixa "R$ 80–180/hora"."""
+    base = espaco.get("preco_hora")
+    if not isinstance(base, (int, float)):
+        return "—"
+    minimo, maximo = espaco.get("preco_minimo", base), espaco.get("preco_maximo", base)
+    if minimo == maximo:
+        return f"{moeda(maximo)}/hora"
+    return f"{moeda(minimo)}–{moeda(maximo).removeprefix('R$ ')}/hora"
+
+
+def resumo_regras_preco(regras) -> list:
+    """Uma linha por regra: "Sáb e Dom, 18:00–23:00: R$ 180/hora"."""
+    return [f"{rotulo_dias(r['dias'])}, {r['inicio']}–{r['fim']}: {moeda(r['preco_hora'])}/hora"
+            for r in regras or []]
+
+
 def descricao_confianca(confianca):
     """(texto, cor) do índice de comparecimento do cliente, exibido ao locador."""
     if not confianca or confianca.get("percentual") is None:
@@ -276,8 +312,7 @@ def card_espaco(espaco, on_reservar=None, on_detalhe=None, on_favoritar=None,
     `espaco` é o dict serializado pela API. Callbacks recebem o evento Flet.
     """
     modalidade = espaco.get("modalidade") or espaco.get("tipo_esporte") or ""
-    preco = espaco.get("preco_hora")
-    preco_txt = f"R$ {preco:.0f}/hora" if isinstance(preco, (int, float)) else "—"
+    preco_txt = texto_preco(espaco)
     nota = espaco.get("nota_media")
 
     # Topo: imagem ou ícone da modalidade + badge.

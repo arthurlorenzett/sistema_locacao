@@ -72,3 +72,8 @@ def descrever_periodo(inicio_iso: str, fim_iso) -> str:
     if fim.date() == inicio.date():
         return f"{_dia_curto(inicio)} · {inicio:%H:%M}–{fim:%H:%M}"
     return f"{_dia_curto(inicio)} {inicio:%H:%M} → {_dia_curto(fim)} {fim:%H:%M}"
+
+
+def valor_reserva(horarios: list, indice: int, horas: int) -> float:
+    """Valor de `horas` horários seguidos a partir de `indice` (cada horário traz o seu preço)."""
+    return round(sum(h["preco"] for h in horarios[indice:indice + horas]), 2)

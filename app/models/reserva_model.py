@@ -87,16 +87,19 @@ class Reserva(db.Model):
     # Pagamento (simulado, sem integração bancária real)
     metodo_pagamento = db.Column(db.String(20))   # 'online' | 'presencial'
     status_pagamento = db.Column(db.String(20), default="Pendente")  # Pendente | Pago | Presencial
+    # Valor calculado na hora da reserva (preço padrão + regras por horário); nulo em reservas antigas
+    valor_total = db.Column(db.Float)
 
     # Chaves Estrangeiras
     locatario_id = db.Column(db.Integer, db.ForeignKey('locatarios.id'), nullable=False)
     espaco_id = db.Column(db.Integer, db.ForeignKey('espacos_esportivos.id'), nullable=False)
 
-    def __init__(self, locatario_id, espaco_id, data_horario, data_fim=None):
+    def __init__(self, locatario_id, espaco_id, data_horario, data_fim=None, valor_total=None):
         self.locatario_id = locatario_id
         self.espaco_id = espaco_id
         self.data_horario = data_horario
         self.data_fim = data_fim
+        self.valor_total = valor_total
         self.status_texto = "Pendente"
         self.status_pagamento = "Pendente"
         self.created_at = datetime.utcnow()
@@ -146,6 +149,7 @@ class Reserva(db.Model):
             "status": self.status_texto,
             "status_pagamento": self.status_pagamento,
             "metodo_pagamento": self.metodo_pagamento,
+            "valor_total": self.valor_total,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "locatario_id": self.locatario_id,
             "espaco_id": self.espaco_id,

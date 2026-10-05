@@ -2,6 +2,8 @@ from datetime import datetime, time, timedelta
 
 from app import db
 from app.models.horario_funcionamento_model import DIAS_SEMANA, HorarioFuncionamento
+from app.models.regra_preco_model import RegraPreco
+from app.services import precos
 
 class EspacoEsportivo(db.Model):
     """
@@ -35,6 +37,15 @@ class EspacoEsportivo(db.Model):
     # Grade semanal de funcionamento (vazia = espaço antigo, sem restrição de horário)
     horarios = db.relationship(HorarioFuncionamento, lazy='selectin', cascade='all, delete-orphan',
                                order_by=HorarioFuncionamento.dia_semana)
+
+    # Preços diferentes do padrão por dia/horário (vazio = sempre preco_hora)
+    regras_preco = db.relationship(RegraPreco, lazy='selectin', cascade='all, delete-orphan',
+                                   order_by=(RegraPreco.dia_semana, RegraPreco.inicio))
+
+    def definir_regras_preco(self, linhas):
+        """Substitui as regras de preço; `linhas` vem de validacao.validar_regras_preco."""
+        self.regras_preco = [RegraPreco(dia_semana=d, inicio=i, fim=f, preco_hora=p)
+                             for d, i, f, p in linhas]
 
     def horario_do_dia(self, dia_semana):
         return next((h for h in self.horarios if h.dia_semana == dia_semana), None)
@@ -87,4 +98,7 @@ class EspacoEsportivo(db.Model):
             "ativo": self.ativo,
             "locador_id": self.locador_id,
             "horarios": [h.to_dict() for h in self.horarios],
+            "regras_preco": precos.agrupar(self.regras_preco),
+            "preco_minimo": precos.faixa(self)[0],
+            "preco_maximo": precos.faixa(self)[1],
         }

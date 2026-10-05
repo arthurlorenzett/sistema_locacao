@@ -157,6 +157,7 @@ def criar_espaco():
     try:
         preco = validacao.validar_preco(dados.get('preco_hora'))
         grade = validacao.validar_horarios(dados['horarios']) if 'horarios' in dados else None
+        regras = validacao.validar_regras_preco(dados.get('regras_preco') or [])
     except ValueError as e:
         return jsonify({"erro": str(e)}), 400
 
@@ -178,6 +179,7 @@ def criar_espaco():
     db.session.add(espaco)
     if grade:
         espaco.definir_horarios(grade)
+    espaco.definir_regras_preco(regras)
     db.session.commit()
     return jsonify({"mensagem": "Espaço cadastrado com sucesso!", "id": espaco.id}), 201
 
@@ -211,6 +213,12 @@ def editar_espaco(id):
     for campo in ('aceita_online', 'aceita_presencial', 'disponivel', 'ativo'):
         if campo in dados:
             setattr(espaco, campo, bool(dados[campo]))
+    if 'regras_preco' in dados:
+        try:
+            espaco.definir_regras_preco(validacao.validar_regras_preco(dados['regras_preco'] or []))
+        except ValueError as e:
+            db.session.rollback()
+            return jsonify({"erro": str(e)}), 400
     if 'horarios' in dados:
         try:
             espaco.definir_horarios(validacao.validar_horarios(dados['horarios']))
