@@ -91,6 +91,22 @@ class ReservaFacade:
             raise
 
     @staticmethod
+    def registrar_comparecimento(reserva_id, compareceu: bool):
+        """Depois do horário, registra se o cliente compareceu (Concluída) ou faltou (no-show)."""
+        reserva = Reserva.query.get(reserva_id)
+        if not reserva:
+            raise ValueError("Reserva não encontrada.")
+        if reserva.fim_efetivo > validacao.agora():
+            raise ValueError("Só é possível registrar o comparecimento depois do horário da reserva.")
+        try:
+            mensagem = reserva.registrar_comparecimento(compareceu)  # padrão State
+            db.session.commit()
+            return mensagem
+        except ValueError:
+            db.session.rollback()
+            raise
+
+    @staticmethod
     def cancelar_reserva(reserva_id):
         reserva = Reserva.query.get(reserva_id)
         if not reserva:

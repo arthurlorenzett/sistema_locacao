@@ -354,8 +354,8 @@ def tela_reservas_recebidas(page: ft.Page):
             if not reservas:
                 lista.controls.append(ft.Text("Nenhuma reserva recebida ainda.", color=COR_TEXTO_SUAVE))
             for r in reservas:
-                lista.controls.append(_card_reserva(page, r, carregar,
-                                                    permitir_cancelar=True, permitir_confirmar=True))
+                lista.controls.append(_card_reserva(page, r, carregar, permitir_cancelar=True,
+                                                    permitir_confirmar=True, visao_locador=True))
         page.update()
 
     carregar()

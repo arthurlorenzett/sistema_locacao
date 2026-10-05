@@ -6,12 +6,12 @@ import flet as ft
 from frontend import agenda
 from frontend.api_client import (
     api_listar_espacos, api_disponibilidade, api_reservar, api_confirmar_reserva,
-    api_minhas_reservas, api_cancelar_reserva,
+    api_minhas_reservas, api_cancelar_reserva, api_registrar_comparecimento,
     api_favoritos, api_favoritar, api_desfavoritar,
 )
 from frontend.componentes import (
     cabecalho_tela, card, card_espaco, faixa_estatisticas, campo, snack, estrelas_avaliacao,
-    icone_modalidade,
+    icone_modalidade, descricao_confianca,
 )
 from frontend.tema import (
     COR_PRIMARIA, COR_SECUNDARIA, COR_TEXTO, COR_TEXTO_SUAVE, COR_CARD,
@@ -353,7 +353,8 @@ def _fazer(espaco, fn):
 
 # --------- Minhas Reservas ---------
 
-_CORES_STATUS = {"Pendente": COR_AVISO, "Confirmada": COR_SUCESSO, "Cancelada": COR_ERRO}
+_CORES_STATUS = {"Pendente": COR_AVISO, "Confirmada": COR_SUCESSO, "Cancelada": COR_ERRO,
+                 "Concluída": "#047857", "Não compareceu": "#9F1239"}
 
 
 def tela_minhas_reservas(page: ft.Page):
@@ -379,7 +380,9 @@ def tela_minhas_reservas(page: ft.Page):
                      spacing=8, scroll=ft.ScrollMode.AUTO)
 
 
-def _card_reserva(page, r, recarregar, permitir_cancelar=False, permitir_confirmar=False):
+def _card_reserva(page, r, recarregar, permitir_cancelar=False, permitir_confirmar=False,
+                  visao_locador=False):
+    """Card de uma reserva. `visao_locador` mostra o cliente e o índice de comparecimento dele."""
     status = r.get("status", "Pendente")
     cor = _CORES_STATUS.get(status, COR_TEXTO_SUAVE)
 
@@ -388,21 +391,38 @@ def _card_reserva(page, r, recarregar, permitir_cancelar=False, permitir_confirm
         acoes.append(ft.ElevatedButton("Confirmar", icon=ft.Icons.CHECK,
                      on_click=lambda e: _confirmar_recebida(page, r["id"], recarregar),
                      bgcolor=COR_PRIMARIA, color="white", height=38))
-    if permitir_cancelar and status != "Cancelada":
+    if r.get("pode_registrar_comparecimento"):
+        acoes.append(ft.ElevatedButton("Compareceu", icon=ft.Icons.HOW_TO_REG,
+                     on_click=lambda e: _registrar_comparecimento(page, r["id"], True, recarregar),
+                     bgcolor=COR_PRIMARIA, color="white", height=38))
+        acoes.append(ft.OutlinedButton("Não compareceu", icon=ft.Icons.PERSON_OFF,
+                     on_click=lambda e: _confirmar_falta(page, r, recarregar)))
+    if permitir_cancelar and r.get("pode_cancelar"):
         acoes.append(ft.OutlinedButton("Cancelar", icon=ft.Icons.CLOSE,
                      on_click=lambda e: _cancelar(page, r["id"], recarregar)))
+
+    quando = agenda.descrever_periodo(r["data_horario"], r.get("data_fim")) if r.get("data_horario") else "—"
+    linhas = [
+        ft.Text(r.get("espaco_nome") or f"Espaço #{r.get('espaco_id')}",
+                weight=ft.FontWeight.BOLD, size=15, color=COR_TEXTO),
+        ft.Text(quando, size=12, color=COR_TEXTO_SUAVE),
+        ft.Text(f"Pagamento: {r.get('status_pagamento') or '—'}"
+                + (f" ({r.get('metodo_pagamento')})" if r.get('metodo_pagamento') else ""),
+                size=12, color=COR_TEXTO_SUAVE),
+    ]
+    if visao_locador:
+        texto_confianca, cor_confianca = descricao_confianca(r.get("confianca"))
+        linhas.insert(1, ft.Row([
+            ft.Icon(ft.Icons.PERSON, size=14, color=COR_TEXTO_SUAVE),
+            ft.Text(r.get("locatario_nome") or "Cliente", size=12, weight=ft.FontWeight.W_600, color=COR_TEXTO),
+            ft.Text("·", size=12, color=COR_TEXTO_SUAVE),
+            ft.Text(texto_confianca, size=12, color=cor_confianca),
+        ], spacing=4, tight=True, wrap=True))
 
     return ft.Container(
         content=ft.Row([
             ft.Icon(icone_modalidade(r.get("espaco_modalidade")), color=COR_SECUNDARIA, size=30),
-            ft.Column([
-                ft.Text(r.get("espaco_nome") or f"Espaço #{r.get('espaco_id')}",
-                        weight=ft.FontWeight.BOLD, size=15, color=COR_TEXTO),
-                ft.Text(f"{(r.get('data_horario') or '').replace('T', ' ')}", size=12, color=COR_TEXTO_SUAVE),
-                ft.Text(f"Pagamento: {r.get('status_pagamento') or '—'}"
-                        + (f" ({r.get('metodo_pagamento')})" if r.get('metodo_pagamento') else ""),
-                        size=12, color=COR_TEXTO_SUAVE),
-            ], spacing=2, expand=True),
+            ft.Column(linhas, spacing=2, expand=True),
             ft.Container(content=ft.Text(status, color="white", size=12, weight=ft.FontWeight.W_600),
                          bgcolor=cor, padding=ft.Padding(10, 4, 10, 4), border_radius=8),
             ft.Row(acoes, spacing=6),
@@ -410,6 +430,37 @@ def _card_reserva(page, r, recarregar, permitir_cancelar=False, permitir_confirm
         bgcolor=COR_CARD, border_radius=12, padding=ft.Padding(16, 12, 16, 12),
         shadow=ft.BoxShadow(blur_radius=6, color="#1118271A"),
     )
+
+
+def _registrar_comparecimento(page, reserva_id, compareceu, recarregar):
+    dados, code = api_registrar_comparecimento(reserva_id, compareceu)
+    if code == 200:
+        snack(page, dados.get("mensagem", "Comparecimento registrado."), COR_SUCESSO)
+        recarregar()
+    else:
+        snack(page, dados.get("erro", "Não foi possível registrar."), COR_ERRO)
+
+
+def _confirmar_falta(page, r, recarregar):
+    """Registrar falta não tem volta e pesa no histórico do cliente: pede confirmação."""
+    def fechar(_=None):
+        dlg.open = False
+        dlg.update()
+
+    def registrar(_):
+        fechar()
+        _registrar_comparecimento(page, r["id"], False, recarregar)
+
+    dlg = ft.AlertDialog(
+        title=ft.Text("Registrar falta?"),
+        content=ft.Text(f"{r.get('locatario_nome') or 'O cliente'} não compareceu a esta reserva? "
+                        "A falta entra no histórico de comparecimento dele e não pode ser desfeita."),
+        actions=[
+            ft.TextButton("Voltar", on_click=fechar),
+            ft.ElevatedButton("Registrar falta", on_click=registrar, bgcolor=COR_ERRO, color="white"),
+        ],
+    )
+    page.show_dialog(dlg)
 
 
 def _cancelar(page, reserva_id, recarregar):

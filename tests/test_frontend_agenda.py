@@ -66,3 +66,9 @@ def test_descreve_faixa_no_mesmo_dia_e_ate_meia_noite():
 def test_descreve_periodo_que_atravessa_dias():
     assert (descrever_bloqueio(_b("2026-10-06T22:00:00", "2026-10-07T02:00:00"))
             == "Ter 06/10 22:00 → Qua 07/10 02:00")
+
+
+def test_descreve_periodo_de_reserva_sem_fim_como_uma_hora():
+    from frontend.agenda import descrever_periodo
+    assert descrever_periodo("2026-10-06T21:00:00", None) == "Ter 06/10 · 21:00–22:00"
+    assert descrever_periodo("2026-10-06T22:00:00", "2026-10-07T00:00:00") == "Ter 06/10 · 22:00–24:00"

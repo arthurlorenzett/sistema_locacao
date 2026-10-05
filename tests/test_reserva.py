@@ -27,3 +27,24 @@ def test_nao_pode_confirmar_reserva_cancelada():
     # Tenta confirmar e espera que o sistema bloqueie com um erro
     with pytest.raises(ValueError, match="Não é possível confirmar uma reserva que já foi cancelada"):
         reserva.confirmar_reserva()
+
+def test_confirmada_registra_comparecimento():
+    """Regra: depois do jogo, a reserva confirmada vira Concluída ou Não compareceu."""
+    from app.models.reserva_model import ReservaConcluida, ReservaNaoCompareceu
+    compareceu = Reserva(locatario_id=1, espaco_id=1, data_horario="2026-10-10 10:00")
+    compareceu.confirmar_reserva()
+    compareceu.registrar_comparecimento(True)
+    assert compareceu.status_texto == "Concluída"
+    assert isinstance(compareceu.estado_atual, ReservaConcluida)
+
+    faltou = Reserva(locatario_id=1, espaco_id=1, data_horario="2026-10-10 10:00")
+    faltou.confirmar_reserva()
+    faltou.registrar_comparecimento(False)
+    assert faltou.status_texto == "Não compareceu"
+    assert isinstance(faltou.estado_atual, ReservaNaoCompareceu)
+
+
+def test_pendente_nao_registra_comparecimento():
+    reserva = Reserva(locatario_id=1, espaco_id=1, data_horario="2026-10-10 10:00")
+    with pytest.raises(ValueError, match="confirmadas"):
+        reserva.registrar_comparecimento(True)

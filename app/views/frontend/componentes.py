@@ -80,6 +80,16 @@ def texto_hoje(horarios, dia_semana):
     return f"Hoje: {h['abre']}–{h['fecha']}" if h else "Hoje: fechado"
 
 
+def descricao_confianca(confianca):
+    """(texto, cor) do índice de comparecimento do cliente, exibido ao locador."""
+    if not confianca or confianca.get("percentual") is None:
+        return "Cliente novo (sem histórico)", COR_TEXTO_SUAVE
+    pct = confianca["percentual"]
+    total = confianca["comparecimentos"] + confianca["faltas"]
+    cor = COR_SUCESSO if pct >= 80 else COR_AVISO if pct >= 50 else COR_ERRO
+    return f"{pct}% de comparecimento ({confianca['comparecimentos']} de {total})", cor
+
+
 def estrelas_avaliacao(nota, tamanho=16):
     """Linha de estrelas (0-5) com a nota numérica ao lado."""
     nota = float(nota or 0)
