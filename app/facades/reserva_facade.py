@@ -7,7 +7,7 @@ e cancelamento — sempre via o padrão State da `Reserva`.
 
 from app.models.reserva_model import Reserva
 from app.models.espaco_esportivo_model import EspacoEsportivo
-from app.services import agenda, validacao
+from app.services import agenda, avaliacoes, validacao
 from app import db
 
 
@@ -100,6 +100,8 @@ class ReservaFacade:
             raise ValueError("Só é possível registrar o comparecimento depois do horário da reserva.")
         try:
             mensagem = reserva.registrar_comparecimento(compareceu)  # padrão State
+            if not compareceu:
+                avaliacoes.remover_da_reserva(reserva.id)  # só avalia quem compareceu
             db.session.commit()
             return mensagem
         except ValueError:

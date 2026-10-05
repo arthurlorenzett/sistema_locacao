@@ -9,6 +9,7 @@ from app.models.espaco_esportivo_model import EspacoEsportivo
 from app.models.reserva_model import Reserva
 from app.models.favorito_model import Favorito
 from app.models.bloqueio_model import Bloqueio
+from app.models.avaliacao_model import Avaliacao
 
 __all__ = [
     "Usuario",
@@ -20,4 +21,5 @@ __all__ = [
     "Reserva",
     "Favorito",
     "Bloqueio",
+    "Avaliacao",
 ]

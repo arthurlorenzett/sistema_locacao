@@ -93,6 +93,11 @@ def api_espaco(id):
     return api_get(f"/espacos/{id}")
 
 
+def api_avaliacoes(espaco_id):
+    """Média, total e as avaliações mais recentes do espaço."""
+    return api_get(f"/espacos/{espaco_id}/avaliacoes")
+
+
 def api_disponibilidade(espaco_id, data):
     """Horários do dia (data AAAA-MM-DD) com o que está livre para reservar."""
     return api_get(f"/espacos/{espaco_id}/disponibilidade?data={data}")
@@ -159,6 +164,11 @@ def api_reservas_recebidas():
 
 def api_confirmar_reserva(id, metodo_pagamento):
     return api_put(f"/reservas/{id}/confirmar", {"metodo_pagamento": metodo_pagamento})
+
+
+def api_avaliar(reserva_id, nota, comentario=None):
+    """Avalia o espaço de uma reserva já realizada (nota de 1 a 5)."""
+    return api_post(f"/reservas/{reserva_id}/avaliacao", {"nota": nota, "comentario": comentario})
 
 
 def api_registrar_comparecimento(id, compareceu):

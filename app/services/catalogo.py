@@ -1,7 +1,7 @@
 """Como os espaços aparecem nas listagens (catálogo, favoritos, meus espaços)."""
 
 from app.models.favorito_model import Favorito
-from app.services import agenda
+from app.services import agenda, avaliacoes
 
 
 def ids_favoritos(locatario_id) -> set:
@@ -10,5 +10,6 @@ def ids_favoritos(locatario_id) -> set:
 
 
 def dict_catalogo(espaco, favoritos=frozenset()) -> dict:
-    """Dados do espaço + se é favorito + se ainda há horário livre hoje."""
-    return dict(espaco.to_dict(), favorito=espaco.id in favoritos, livre_hoje=agenda.livre_hoje(espaco))
+    """Dados do espaço + favorito + horário livre hoje + média das avaliações."""
+    return dict(espaco.to_dict(), favorito=espaco.id in favoritos, livre_hoje=agenda.livre_hoje(espaco),
+                **avaliacoes.resumo_do_espaco(espaco.id))

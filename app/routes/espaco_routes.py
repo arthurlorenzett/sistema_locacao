@@ -11,7 +11,9 @@ from flask import Blueprint, request, jsonify, g
 from app import db
 from app.models.espaco_esportivo_model import EspacoEsportivo
 from app.auth.decorators import requer_perfil, login_obrigatorio, usuario_do_token
-from app.services import agenda, validacao
+from app.models.avaliacao_model import Avaliacao
+from app.models.usuario_model import Usuario
+from app.services import agenda, avaliacoes, validacao
 from app.services.catalogo import dict_catalogo, ids_favoritos
 
 espaco_bp = Blueprint('espaco_bp', __name__)
@@ -20,12 +22,16 @@ espaco_bp = Blueprint('espaco_bp', __name__)
 @espaco_bp.route('', methods=['GET'], strict_slashes=False)
 def listar_espacos():
     """Catálogo com filtros: regiao, modalidade, tipo_quadra, preco_min/max, data+hora,
-    disponivel_hoje (só espaços com algum horário livre hoje)."""
+    disponivel_hoje (só espaços com algum horário livre hoje), nota_min (avaliação mínima)."""
     try:
         pmin, pmax = validacao.faixa_preco(request.args.get('preco_min'),
                                            request.args.get('preco_max'))
     except ValueError as e:
         return jsonify({"erro": str(e)}), 400
+    try:
+        nota_min = float(request.args['nota_min']) if request.args.get('nota_min') else None
+    except ValueError:
+        return jsonify({"erro": "Avaliação mínima inválida."}), 400
 
     query = EspacoEsportivo.query.filter_by(ativo=True)
 
@@ -63,6 +69,9 @@ def listar_espacos():
     itens = [dict_catalogo(e, favoritos) for e in espacos]
     if request.args.get('disponivel_hoje') in ('1', 'true'):
         itens = [i for i in itens if i["livre_hoje"]]
+    if nota_min is not None:
+        # Espaço ainda sem avaliações não entra quando se pede uma nota mínima.
+        itens = [i for i in itens if i["nota_media"] is not None and i["nota_media"] >= nota_min]
 
     return jsonify({"espacos": itens, "total": len(itens)}), 200
 
@@ -80,7 +89,30 @@ def detalhar_espaco(id):
     espaco = EspacoEsportivo.query.get(id)
     if not espaco:
         return jsonify({"erro": "Espaço não encontrado."}), 404
-    return jsonify(espaco.to_dict()), 200
+    return jsonify(dict(espaco.to_dict(), **avaliacoes.resumo_do_espaco(espaco.id))), 200
+
+
+@espaco_bp.route('/<int:id>/avaliacoes', methods=['GET'])
+def listar_avaliacoes(id):
+    """Avaliações do espaço (mais recentes primeiro), com média e total. Pública."""
+    if not EspacoEsportivo.query.get(id):
+        return jsonify({"erro": "Espaço não encontrado."}), 404
+    linhas = (db.session.query(Avaliacao, Usuario.nome)
+              .join(Usuario, Usuario.id == Avaliacao.locatario_id)
+              .filter(Avaliacao.espaco_id == id)
+              .order_by(Avaliacao.created_at.desc(), Avaliacao.id.desc())
+              .limit(50).all())
+    resumo = avaliacoes.resumo_do_espaco(id)
+    return jsonify({
+        "media": resumo["nota_media"],
+        "total": resumo["total_avaliacoes"],
+        "avaliacoes": [{
+            "nota": a.nota,
+            "comentario": a.comentario,
+            "autor": (nome or "Cliente").split()[0],  # só o primeiro nome
+            "data": a.created_at.date().isoformat() if a.created_at else None,
+        } for a, nome in linhas],
+    }), 200
 
 
 @espaco_bp.route('/<int:id>/disponibilidade', methods=['GET'])
