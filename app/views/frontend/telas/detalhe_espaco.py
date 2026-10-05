@@ -2,7 +2,10 @@
 
 import flet as ft
 
-from frontend.componentes import card, estrelas_avaliacao, icone_modalidade, resumo_horarios
+from frontend.api_client import api_avaliacoes
+from frontend.componentes import (
+    card, estrelas_avaliacao, icone_modalidade, resumo_horarios, data_br, texto_total_avaliacoes,
+)
 from frontend.tema import (
     COR_PRIMARIA, COR_SECUNDARIA, COR_TEXTO, COR_TEXTO_SUAVE, COR_CARD,
 )
@@ -25,6 +28,34 @@ def _bloco_horarios(horarios):
         ft.Text("Horários: ", size=14, weight=ft.FontWeight.W_600, color=COR_TEXTO),
         ft.Column([ft.Text(l, size=14, color=COR_TEXTO_SUAVE) for l in linhas], spacing=2),
     ], spacing=6, vertical_alignment=ft.CrossAxisAlignment.START)
+
+
+def _bloco_avaliacoes(espaco_id):
+    """Média, total e os comentários mais recentes do espaço."""
+    dados, code = api_avaliacoes(espaco_id)
+    titulo = ft.Text("Avaliações", size=18, weight=ft.FontWeight.BOLD, color=COR_TEXTO)
+    if code != 200:
+        return card(ft.Column([titulo, ft.Text(dados.get("erro", "Não foi possível carregar as avaliações."),
+                                               size=13, color=COR_TEXTO_SUAVE)], spacing=8))
+    if not dados.get("total"):
+        return card(ft.Column([titulo, ft.Text("Este espaço ainda não foi avaliado.",
+                                               size=13, color=COR_TEXTO_SUAVE)], spacing=8))
+
+    itens = []
+    for a in dados.get("avaliacoes", []):
+        itens.append(ft.Column([
+            ft.Row([estrelas_avaliacao(a["nota"], tamanho=14),
+                    ft.Text(f"{a.get('autor') or 'Cliente'} · {data_br(a.get('data'))}",
+                            size=12, color=COR_TEXTO_SUAVE)], spacing=8),
+            *([ft.Text(a["comentario"], size=14, color=COR_TEXTO)] if a.get("comentario") else []),
+        ], spacing=2))
+        itens.append(ft.Divider(height=12))
+    return card(ft.Column([
+        ft.Row([titulo, estrelas_avaliacao(dados.get("media"), tamanho=18),
+                ft.Text(texto_total_avaliacoes(dados["total"]), size=13, color=COR_TEXTO_SUAVE)],
+               spacing=10, wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        *itens[:-1],
+    ], spacing=8))
 
 
 def view_detalhe(page: ft.Page, espaco: dict, on_voltar, on_reservar):
@@ -73,4 +104,5 @@ def view_detalhe(page: ft.Page, espaco: dict, on_voltar, on_reservar):
         topo,
         ft.Container(height=8),
         detalhes,
+        _bloco_avaliacoes(espaco["id"]),
     ], spacing=8, scroll=ft.ScrollMode.AUTO)

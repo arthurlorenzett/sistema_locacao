@@ -20,3 +20,19 @@ def test_faixas_de_confianca():
     assert descricao_confianca(_c(9, 1, 90)) == ("90% de comparecimento (9 de 10)", COR_SUCESSO)
     assert descricao_confianca(_c(2, 1, 67)) == ("67% de comparecimento (2 de 3)", COR_AVISO)
     assert descricao_confianca(_c(1, 2, 33)) == ("33% de comparecimento (1 de 3)", COR_ERRO)
+
+
+# --- avaliações ---
+
+from frontend.componentes import data_br, texto_total_avaliacoes  # noqa: E402
+
+
+def test_total_de_avaliacoes_no_singular_e_plural():
+    assert texto_total_avaliacoes(0) == "Sem avaliações"
+    assert texto_total_avaliacoes(1) == "1 avaliação"
+    assert texto_total_avaliacoes(12) == "12 avaliações"
+
+
+def test_data_no_formato_brasileiro():
+    assert data_br("2026-10-05") == "05/10/2026"
+    assert data_br(None) == ""

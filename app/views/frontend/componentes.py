@@ -90,6 +90,20 @@ def descricao_confianca(confianca):
     return f"{pct}% de comparecimento ({confianca['comparecimentos']} de {total})", cor
 
 
+def texto_total_avaliacoes(total) -> str:
+    if not total:
+        return "Sem avaliações"
+    return "1 avaliação" if total == 1 else f"{total} avaliações"
+
+
+def data_br(data_iso) -> str:
+    """"2026-10-05" -> "05/10/2026" (vazio se não houver data)."""
+    if not data_iso:
+        return ""
+    ano, mes, dia = data_iso[:10].split("-")
+    return f"{dia}/{mes}/{ano}"
+
+
 def estrelas_avaliacao(nota, tamanho=16):
     """Linha de estrelas (0-5) com a nota numérica ao lado."""
     nota = float(nota or 0)
@@ -286,7 +300,10 @@ def card_espaco(espaco, on_reservar=None, on_detalhe=None, on_favoritar=None,
 
     topo = ft.Stack([topo_visual, ft.Container(content=badge, padding=8)], height=140)
 
-    linha_rating = estrelas_avaliacao(nota) if nota else ft.Row(
+    linha_rating = ft.Row(
+        [estrelas_avaliacao(nota),
+         ft.Text(f"({espaco.get('total_avaliacoes') or 0})", size=12, color=COR_TEXTO_SUAVE)],
+        spacing=4, tight=True) if nota else ft.Row(
         [ft.Icon(icone_modalidade(modalidade), size=16, color=COR_SECUNDARIA),
          ft.Text(modalidade, size=12, color=COR_TEXTO_SUAVE)], spacing=5, tight=True)
 

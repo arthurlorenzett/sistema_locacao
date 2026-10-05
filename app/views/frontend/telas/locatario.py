@@ -6,7 +6,7 @@ import flet as ft
 from frontend import agenda
 from frontend.api_client import (
     api_listar_espacos, api_disponibilidade, api_reservar, api_confirmar_reserva,
-    api_minhas_reservas, api_cancelar_reserva, api_registrar_comparecimento,
+    api_minhas_reservas, api_cancelar_reserva, api_registrar_comparecimento, api_avaliar,
     api_favoritos, api_favoritar, api_desfavoritar,
 )
 from frontend.componentes import (
@@ -28,6 +28,8 @@ _DURACOES = {"1": "1 hora", "2": "2 horas", "3": "3 horas"}
 _MOTIVOS = {"passado": "Horário já passou", "reservado": "Já reservado",
             "bloqueado": "Indisponível (fechado pelo local)"}
 _COR_SELECAO = "#A7F3D0"  # verde claro para o dia/horário escolhido
+# Opções do filtro "avaliação mínima" da busca (valor enviado -> rótulo).
+_NOTAS_MINIMAS = {"": "Qualquer", "3": "3+ estrelas", "4": "4+ estrelas", "4.5": "4,5+ estrelas"}
 
 
 def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
@@ -167,6 +169,62 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
     carregar_dia(dia_hoje)
 
 
+def dialogo_avaliacao(page: ft.Page, r: dict, ao_sucesso=None):
+    """Diálogo para o cliente avaliar o espaço depois do jogo: estrelas + comentário opcional."""
+    estado = {"nota": 0}
+    estrelas = ft.Row(spacing=0, tight=True)
+    f_comentario = ft.TextField(label="Comentário (opcional)", multiline=True, min_lines=3, max_lines=5,
+                                max_length=1000, width=360, border_radius=10)
+
+    def desenhar_estrelas():
+        estrelas.controls = [
+            ft.IconButton(ft.Icons.STAR if i <= estado["nota"] else ft.Icons.STAR_BORDER,
+                          icon_color=COR_AVISO, icon_size=34, tooltip=f"{i} estrela{'s' if i > 1 else ''}",
+                          on_click=_dar_nota(i))
+            for i in range(1, 6)
+        ]
+
+    def _dar_nota(nota):
+        def handler(e):
+            estado["nota"] = nota
+            desenhar_estrelas()
+            page.update()
+        return handler
+
+    def fechar(_=None):
+        dlg.open = False
+        dlg.update()
+
+    def enviar(_):
+        if not estado["nota"]:
+            snack(page, "Toque nas estrelas para dar uma nota.", COR_AVISO)
+            return
+        dados, code = api_avaliar(r["id"], estado["nota"], (f_comentario.value or "").strip())
+        if code != 201:
+            snack(page, dados.get("erro", "Não foi possível enviar a avaliação."), COR_ERRO)
+            return
+        snack(page, dados.get("mensagem", "Obrigado pela avaliação!"), COR_SUCESSO)
+        fechar()
+        if ao_sucesso:
+            ao_sucesso()
+
+    desenhar_estrelas()
+    dlg = ft.AlertDialog(
+        modal=True,
+        title=ft.Text(f"Avaliar — {r.get('espaco_nome') or 'espaço'}", color=COR_TEXTO),
+        content=ft.Column([
+            ft.Text("Como foi a sua experiência?", size=13, color=COR_TEXTO_SUAVE),
+            estrelas,
+            f_comentario,
+        ], tight=True, spacing=10, width=380),
+        actions=[
+            ft.TextButton("Agora não", on_click=fechar),
+            ft.ElevatedButton("Enviar avaliação", on_click=enviar, bgcolor=COR_PRIMARIA, color="white"),
+        ],
+    )
+    page.show_dialog(dlg)
+
+
 def tela_buscar_espacos(page: ft.Page):
     """Busca de quadras: hero + filtros + grade de cards + estatísticas."""
     raiz = ft.Container(expand=True)
@@ -180,6 +238,8 @@ def tela_buscar_espacos(page: ft.Page):
                             options=[ft.dropdown.Option("")] + [ft.dropdown.Option(p) for p in _PERIODOS])
     f_preco_min = campo("Preço mín. (R$)", width=150)
     f_preco_max = campo("Preço máx. (R$)", width=150)
+    f_nota = ft.Dropdown(label="Avaliação", width=170,
+                         options=[ft.dropdown.Option(k, v) for k, v in _NOTAS_MINIMAS.items()])
     c_livre_hoje = ft.Checkbox(label="Só com horário livre hoje", value=False)
     filtros_tela = [
         ft.Container(f_local, col={"sm": 12, "md": 4}),
@@ -188,6 +248,7 @@ def tela_buscar_espacos(page: ft.Page):
         ft.Container(f_periodo, col={"sm": 6, "md": 3}),
         ft.Container(f_preco_min, col={"sm": 6, "md": 3}),
         ft.Container(f_preco_max, col={"sm": 6, "md": 3}),
+        ft.Container(f_nota, col={"sm": 6, "md": 2}),
         ft.Container(c_livre_hoje, col={"sm": 12, "md": 4}),
     ]
 
@@ -203,6 +264,8 @@ def tela_buscar_espacos(page: ft.Page):
             filtros["hora"] = _PERIODOS.get(f_periodo.value, "")
         if c_livre_hoje.value:
             filtros["disponivel_hoje"] = "1"
+        if f_nota.value:
+            filtros["nota_min"] = f_nota.value
         dados, code = api_listar_espacos(filtros)
         grade.controls.clear()
         if code == 0:
@@ -397,6 +460,10 @@ def _card_reserva(page, r, recarregar, permitir_cancelar=False, permitir_confirm
                      bgcolor=COR_PRIMARIA, color="white", height=38))
         acoes.append(ft.OutlinedButton("Não compareceu", icon=ft.Icons.PERSON_OFF,
                      on_click=lambda e: _confirmar_falta(page, r, recarregar)))
+    if r.get("pode_avaliar") and not visao_locador:
+        acoes.append(ft.ElevatedButton("Avaliar", icon=ft.Icons.STAR,
+                     on_click=lambda e: dialogo_avaliacao(page, r, ao_sucesso=recarregar),
+                     bgcolor=COR_AVISO, color="white", height=38))
     if permitir_cancelar and r.get("pode_cancelar"):
         acoes.append(ft.OutlinedButton("Cancelar", icon=ft.Icons.CLOSE,
                      on_click=lambda e: _cancelar(page, r["id"], recarregar)))
@@ -410,6 +477,15 @@ def _card_reserva(page, r, recarregar, permitir_cancelar=False, permitir_confirm
                 + (f" ({r.get('metodo_pagamento')})" if r.get('metodo_pagamento') else ""),
                 size=12, color=COR_TEXTO_SUAVE),
     ]
+    avaliacao = r.get("avaliacao")
+    if avaliacao:
+        linhas.append(ft.Row([
+            ft.Text("Avaliação do cliente:" if visao_locador else "Sua avaliação:",
+                    size=12, color=COR_TEXTO_SUAVE),
+            estrelas_avaliacao(avaliacao["nota"], tamanho=14),
+            *([ft.Text(f"“{avaliacao['comentario']}”", size=12, color=COR_TEXTO, italic=True)]
+              if avaliacao.get("comentario") else []),
+        ], spacing=6, tight=True, wrap=True))
     if visao_locador:
         texto_confianca, cor_confianca = descricao_confianca(r.get("confianca"))
         linhas.insert(1, ft.Row([
