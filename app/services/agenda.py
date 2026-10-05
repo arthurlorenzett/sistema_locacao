@@ -29,9 +29,8 @@ def periodos_reservados(espaco_id, inicio, fim, ignorar_reserva_id=None, status=
     for r in reservas:
         if r.id == ignorar_reserva_id:
             continue
-        r_fim = r.data_fim or (r.data_horario + DURACAO_SLOT)
-        if r_fim > inicio:
-            periodos.append((r.data_horario, r_fim))
+        if r.fim_efetivo > inicio:
+            periodos.append((r.data_horario, r.fim_efetivo))
     return periodos
 
 

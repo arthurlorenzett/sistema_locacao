@@ -50,9 +50,16 @@ def _dia_curto(momento) -> str:
 
 
 def descrever_bloqueio(bloqueio: dict) -> str:
-    """Texto curto de um bloqueio: "Ter 06/10 · dia inteiro", "Ter 06/10 · 09:00–11:00"..."""
-    inicio = datetime.fromisoformat(bloqueio["inicio"])
-    fim = datetime.fromisoformat(bloqueio["fim"])
+    return descrever_periodo(bloqueio["inicio"], bloqueio["fim"])
+
+
+def descrever_periodo(inicio_iso: str, fim_iso) -> str:
+    """Texto curto de um período: "Ter 06/10 · dia inteiro", "Ter 06/10 · 09:00–11:00"...
+
+    Sem fim informado (reservas antigas), vale a duração padrão de 1 hora.
+    """
+    inicio = datetime.fromisoformat(inicio_iso)
+    fim = datetime.fromisoformat(fim_iso) if fim_iso else inicio + timedelta(hours=1)
     meia_noite = datetime.combine(inicio.date(), datetime.min.time())
 
     if inicio == meia_noite and fim.time() == datetime.min.time():

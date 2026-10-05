@@ -161,5 +161,10 @@ def api_confirmar_reserva(id, metodo_pagamento):
     return api_put(f"/reservas/{id}/confirmar", {"metodo_pagamento": metodo_pagamento})
 
 
+def api_registrar_comparecimento(id, compareceu):
+    """Locador informa, depois do horário, se o cliente compareceu (True) ou faltou (False)."""
+    return api_put(f"/reservas/{id}/comparecimento", {"compareceu": compareceu})
+
+
 def api_cancelar_reserva(id):
     return api_put(f"/reservas/{id}/cancelar", {})

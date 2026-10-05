@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app import db
 
@@ -15,6 +15,10 @@ class EstadoReserva(ABC):
     @abstractmethod
     def cancelar(self, reserva):
         pass
+
+    def registrar_comparecimento(self, reserva, compareceu):
+        """Só uma reserva confirmada (cujo horário já passou) registra comparecimento."""
+        raise ValueError("Só é possível registrar comparecimento de reservas confirmadas.")
 
 class ReservaPendente(EstadoReserva):
     def confirmar(self, reserva):
@@ -36,12 +40,37 @@ class ReservaConfirmada(EstadoReserva):
         reserva.status_texto = "Cancelada"
         return "Reserva confirmada foi cancelada. Processar regras de estorno, se houver."
 
+    def registrar_comparecimento(self, reserva, compareceu):
+        if compareceu:
+            reserva.estado_atual = ReservaConcluida()
+            reserva.status_texto = "Concluída"
+            return "Comparecimento registrado."
+        reserva.estado_atual = ReservaNaoCompareceu()
+        reserva.status_texto = "Não compareceu"
+        return "Falta registrada."
+
 class ReservaCancelada(EstadoReserva):
     def confirmar(self, reserva):
         raise ValueError("Não é possível confirmar uma reserva que já foi cancelada.")
 
     def cancelar(self, reserva):
         raise ValueError("A reserva já encontra-se cancelada.")
+
+class ReservaConcluida(EstadoReserva):
+    """O jogo aconteceu (o cliente compareceu)."""
+    def confirmar(self, reserva):
+        raise ValueError("A reserva já foi realizada.")
+
+    def cancelar(self, reserva):
+        raise ValueError("Não é possível cancelar uma reserva já realizada.")
+
+class ReservaNaoCompareceu(EstadoReserva):
+    """No-show: o cliente não apareceu no horário reservado."""
+    def confirmar(self, reserva):
+        raise ValueError("O cliente não compareceu a esta reserva.")
+
+    def cancelar(self, reserva):
+        raise ValueError("Não é possível cancelar uma reserva em que o cliente não compareceu.")
 
 # --- MODELO PRINCIPAL ---
 
@@ -83,6 +112,10 @@ class Reserva(db.Model):
                 self._estado_atual = ReservaConfirmada()
             elif self.status_texto == "Cancelada":
                 self._estado_atual = ReservaCancelada()
+            elif self.status_texto == "Concluída":
+                self._estado_atual = ReservaConcluida()
+            elif self.status_texto == "Não compareceu":
+                self._estado_atual = ReservaNaoCompareceu()
         return self._estado_atual
 
     @estado_atual.setter
@@ -95,6 +128,14 @@ class Reserva(db.Model):
 
     def cancelar_reserva(self):
         return self.estado_atual.cancelar(self)
+
+    def registrar_comparecimento(self, compareceu: bool):
+        return self.estado_atual.registrar_comparecimento(self, compareceu)
+
+    @property
+    def fim_efetivo(self):
+        """Término da reserva (sem data_fim, vale a duração padrão de 1 hora)."""
+        return self.data_fim or (self.data_horario + timedelta(hours=1))
 
     def to_dict(self) -> dict:
         """Serialização padrão consumida pela API/frontend."""

@@ -1,11 +1,15 @@
-"""Rotas de reservas: criação, listagem (cliente/locador), confirmação e cancelamento."""
+"""Rotas de reservas: criação, listagem (cliente/locador), confirmação, cancelamento
+e registro de comparecimento (no-show)."""
 
 from flask import Blueprint, request, jsonify, g
 
 from app.facades.reserva_facade import ReservaFacade
 from app.models.reserva_model import Reserva
 from app.models.espaco_esportivo_model import EspacoEsportivo
+from app.models.usuario_model import Usuario
 from app.auth.decorators import login_obrigatorio, requer_perfil
+from app.services import validacao
+from app.services.confianca import indice_confianca
 
 reserva_bp = Blueprint('reserva_bp', __name__)
 
@@ -19,7 +23,18 @@ def _reserva_dict(reserva, espaco=None):
         dados["espaco_modalidade"] = espaco.tipo_esporte
         dados["espaco_endereco"] = espaco.endereco
         dados["preco_hora"] = espaco.preco_hora
+    dados["pode_cancelar"] = (reserva.status_texto in ("Pendente", "Confirmada")
+                              and reserva.fim_efetivo > validacao.agora())
     return dados
+
+
+def _e_dono_do_espaco(reserva) -> bool:
+    """Locador dono do espaço da reserva (ou administrador)."""
+    u = g.usuario
+    if u.tipo_usuario == 'administrador':
+        return True
+    espaco = EspacoEsportivo.query.get(reserva.espaco_id)
+    return bool(u.tipo_usuario == 'locador' and espaco and espaco.locador_id == u.id)
 
 
 def _pode_gerenciar(reserva) -> bool:
@@ -81,7 +96,20 @@ def reservas_recebidas():
                 .filter(Reserva.espaco_id.in_(ids))
                 .order_by(Reserva.data_horario.desc())
                 .all())
-    return jsonify({"reservas": [_reserva_dict(r, mapa.get(r.espaco_id)) for r in reservas]}), 200
+
+    agora = validacao.agora()
+    clientes = {}  # locatario_id -> (nome, índice de confiança), calculado uma vez por cliente
+    itens = []
+    for r in reservas:
+        if r.locatario_id not in clientes:
+            cliente = Usuario.query.get(r.locatario_id)
+            clientes[r.locatario_id] = (cliente.nome if cliente else None, indice_confianca(r.locatario_id))
+        nome, confianca = clientes[r.locatario_id]
+        itens.append(dict(_reserva_dict(r, mapa.get(r.espaco_id)),
+                          locatario_nome=nome, confianca=confianca,
+                          pode_registrar_comparecimento=(r.status_texto == "Confirmada"
+                                                         and r.fim_efetivo <= agora)))
+    return jsonify({"reservas": itens}), 200
 
 
 @reserva_bp.route('/<int:id>/confirmar', methods=['PUT'])
@@ -99,6 +127,26 @@ def confirmar_reserva(id):
         mensagem = ReservaFacade.confirmar_pagamento_e_reserva(id, dados.get('metodo_pagamento'))
         return jsonify({"mensagem": mensagem, "status": reserva.status_texto,
                         "status_pagamento": reserva.status_pagamento}), 200
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+
+
+@reserva_bp.route('/<int:id>/comparecimento', methods=['PUT'])
+@login_obrigatorio
+def registrar_comparecimento(id):
+    """O locador informa, depois do horário, se o cliente compareceu ({"compareceu": true/false})."""
+    reserva = Reserva.query.get(id)
+    if not reserva:
+        return jsonify({"erro": "Reserva não encontrada."}), 404
+    if not _e_dono_do_espaco(reserva):
+        return jsonify({"erro": "Só o dono do espaço registra o comparecimento."}), 403
+
+    compareceu = (request.get_json(silent=True) or {}).get('compareceu')
+    if not isinstance(compareceu, bool):
+        return jsonify({"erro": "Informe compareceu: true ou false."}), 400
+    try:
+        mensagem = ReservaFacade.registrar_comparecimento(id, compareceu)
+        return jsonify({"mensagem": mensagem, "status": reserva.status_texto}), 200
     except ValueError as e:
         return jsonify({"erro": str(e)}), 400
 
