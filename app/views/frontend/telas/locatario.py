@@ -6,12 +6,14 @@ import flet as ft
 from frontend import agenda
 from frontend.api_client import (
     api_listar_espacos, api_disponibilidade, api_reservar, api_confirmar_reserva,
+    api_previa_serie, api_reservar_serie, api_cancelar_serie,
     api_minhas_reservas, api_cancelar_reserva, api_registrar_comparecimento, api_avaliar,
     api_favoritos, api_favoritar, api_desfavoritar,
 )
 from frontend.componentes import (
     cabecalho_tela, card, card_espaco, faixa_estatisticas, campo, snack, estrelas_avaliacao,
     icone_modalidade, descricao_confianca, moeda, texto_preco,
+    linhas_previa_serie, resumo_previa_serie, mensagem_serie,
 )
 from frontend.tema import (
     COR_PRIMARIA, COR_SECUNDARIA, COR_TEXTO, COR_TEXTO_SUAVE, COR_CARD,
@@ -24,6 +26,9 @@ _MODALIDADES = ["Futebol", "Futsal", "Tênis", "Vôlei", "Basquete", "Beach Tên
 # Período -> hora representativa usada no filtro de disponibilidade.
 _PERIODOS = {"Manhã": "09:00", "Tarde": "14:00", "Noite": "19:00"}
 _DURACOES = {"1": "1 hora", "2": "2 horas", "3": "3 horas"}
+# Reserva recorrente (mensalista): valor = número de semanas.
+_REPETICOES = {"": "Não repetir", "4": "Toda semana, por 4 semanas",
+               "8": "Toda semana, por 8 semanas", "12": "Toda semana, por 12 semanas"}
 # Por que um horário aparece desativado na grade do diálogo de reserva.
 _MOTIVOS = {"passado": "Horário já passou", "reservado": "Já reservado",
             "bloqueado": "Indisponível (fechado pelo local)"}
@@ -43,6 +48,9 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
     resumo = ft.Text("", size=13, weight=ft.FontWeight.W_600, color=COR_SECUNDARIA)
     f_duracao = ft.Dropdown(label="Duração", value="1", width=140, dense=True,
                             options=[ft.dropdown.Option(k, v) for k, v in _DURACOES.items()])
+    f_repetir = ft.Dropdown(label="Repetir", value="", width=270, dense=True,
+                            options=[ft.dropdown.Option(k, v) for k, v in _REPETICOES.items()])
+    previa = ft.Column(spacing=2)  # datas da série, quando "Repetir" está ligado
 
     opcoes = []
     if espaco.get("aceita_online", True):
@@ -55,6 +63,7 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
 
     def atualizar_resumo():
         i, horarios = estado["indice"], estado["horarios"]
+        previa.controls = []
         if i is None:
             resumo.value = ""
             return
@@ -67,6 +76,24 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
         resumo.value = (f"{agenda.rotulo_dia(estado['dia'], dia_hoje)} · {horarios[i]['inicio']}–{fim}"
                         f" · {moeda(agenda.valor_reserva(horarios, i, horas))}")
         resumo.color = COR_SECUNDARIA
+        if f_repetir.value:
+            mostrar_previa_da_serie(*agenda.periodo_reserva(estado["dia"], horarios, i, horas))
+
+    def mostrar_previa_da_serie(inicio, fim):
+        """Lista cada data da série com o que está livre, antes de o cliente confirmar."""
+        dados, code = api_previa_serie(espaco["id"], inicio, fim, int(f_repetir.value))
+        if code != 200:
+            resumo.value, resumo.color = dados.get("erro", "Não foi possível montar a série."), COR_ERRO
+            return
+        previa.controls = [
+            ft.Row([ft.Icon(ft.Icons.CHECK_CIRCLE if livre else ft.Icons.CANCEL, size=16,
+                            color=COR_SUCESSO if livre else COR_ERRO),
+                    ft.Text(texto, size=12, color=COR_TEXTO if livre else COR_TEXTO_SUAVE, expand=True)],
+                   spacing=6, vertical_alignment=ft.CrossAxisAlignment.START)
+            for texto, livre in linhas_previa_serie(dados.get("datas"))
+        ]
+        resumo.value = resumo_previa_serie(dados)
+        resumo.color = COR_SECUNDARIA if dados.get("disponiveis") else COR_AVISO
 
     def desenhar():
         linha_dias.controls = [
@@ -114,6 +141,7 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
         page.update()
 
     f_duracao.on_select = ao_mudar_duracao
+    f_repetir.on_select = ao_mudar_duracao
 
     def fechar(_=None):
         # Fecha este diálogo especificamente (pop_dialog fecharia um SnackBar aberto por cima).
@@ -129,6 +157,18 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
             snack(page, resumo.value, COR_AVISO)
             return
         inicio, fim = agenda.periodo_reserva(estado["dia"], estado["horarios"], i, horas)
+        if f_repetir.value:
+            # Mensalista: reserva as datas livres da série e avisa das que ficaram de fora.
+            dados, code = api_reservar_serie(espaco["id"], inicio, fim, int(f_repetir.value), grupo.value)
+            if code != 201:
+                snack(page, dados.get("erro", "Não foi possível reservar."), COR_ERRO)
+                carregar_dia(estado["dia"])
+                return
+            snack(page, mensagem_serie(dados), COR_AVISO if dados.get("recusadas") else COR_SUCESSO)
+            fechar()
+            if ao_sucesso:
+                ao_sucesso()
+            return
         dados, code = api_reservar(espaco["id"], inicio, fim)
         if code != 201:
             snack(page, dados.get("erro", "Não foi possível reservar."), COR_ERRO)
@@ -156,7 +196,8 @@ def dialogo_reserva(page: ft.Page, espaco: dict, ao_sucesso=None):
             ft.Text("Horário de início", size=13, weight=ft.FontWeight.W_600, color=COR_TEXTO),
             info_dia,
             grade_horarios,
-            f_duracao,
+            ft.Row([f_duracao, f_repetir], spacing=10, wrap=True),
+            previa,
             resumo,
             ft.Text("Forma de pagamento", size=13, weight=ft.FontWeight.W_600, color=COR_TEXTO),
             grupo,
@@ -469,6 +510,9 @@ def _card_reserva(page, r, recarregar, permitir_cancelar=False, permitir_confirm
     if permitir_cancelar and r.get("pode_cancelar"):
         acoes.append(ft.OutlinedButton("Cancelar", icon=ft.Icons.CLOSE,
                      on_click=lambda e: _cancelar(page, r["id"], recarregar)))
+        if r.get("serie_id"):
+            acoes.append(ft.TextButton("Cancelar série", icon=ft.Icons.EVENT_BUSY,
+                         on_click=lambda e: _confirmar_cancelar_serie(page, r["serie_id"], recarregar)))
 
     quando = agenda.descrever_periodo(r["data_horario"], r.get("data_fim")) if r.get("data_horario") else "—"
     linhas = [
@@ -480,6 +524,10 @@ def _card_reserva(page, r, recarregar, permitir_cancelar=False, permitir_confirm
                 + (f" ({r.get('metodo_pagamento')})" if r.get('metodo_pagamento') else ""),
                 size=12, color=COR_TEXTO_SUAVE),
     ]
+    if r.get("serie_id"):
+        linhas.append(ft.Row([ft.Icon(ft.Icons.REPEAT, size=14, color=COR_SECUNDARIA),
+                              ft.Text("Reserva semanal (mensalista)", size=12, color=COR_SECUNDARIA)],
+                             spacing=4, tight=True))
     avaliacao = r.get("avaliacao")
     if avaliacao:
         linhas.append(ft.Row([
@@ -509,6 +557,32 @@ def _card_reserva(page, r, recarregar, permitir_cancelar=False, permitir_confirm
         bgcolor=COR_CARD, border_radius=12, padding=ft.Padding(16, 12, 16, 12),
         shadow=ft.BoxShadow(blur_radius=6, color="#1118271A"),
     )
+
+
+def _confirmar_cancelar_serie(page, serie_id, recarregar):
+    """Cancelar a série atinge várias reservas de uma vez: pede confirmação."""
+    def fechar(_=None):
+        dlg.open = False
+        dlg.update()
+
+    def cancelar(_):
+        fechar()
+        dados, code = api_cancelar_serie(serie_id)
+        if code == 200:
+            snack(page, dados.get("mensagem", "Série cancelada."), COR_SUCESSO)
+            recarregar()
+        else:
+            snack(page, dados.get("erro", "Não foi possível cancelar a série."), COR_ERRO)
+
+    dlg = ft.AlertDialog(
+        title=ft.Text("Cancelar a série?"),
+        content=ft.Text("Todas as datas desta reserva semanal que ainda não aconteceram serão canceladas."),
+        actions=[
+            ft.TextButton("Voltar", on_click=fechar),
+            ft.ElevatedButton("Cancelar série", on_click=cancelar, bgcolor=COR_ERRO, color="white"),
+        ],
+    )
+    page.show_dialog(dlg)
 
 
 def _registrar_comparecimento(page, reserva_id, compareceu, recarregar):

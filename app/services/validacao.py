@@ -159,6 +159,16 @@ def validar_regras_preco(regras) -> list:
     return linhas
 
 
+MAX_SEMANAS_SERIE = 12
+
+
+def validar_semanas(valor) -> int:
+    """Quantidade de semanas de uma reserva recorrente (de 2 a 12)."""
+    if isinstance(valor, bool) or not isinstance(valor, int) or not 2 <= valor <= MAX_SEMANAS_SERIE:
+        raise ValueError(f"A reserva recorrente deve ter de 2 a {MAX_SEMANAS_SERIE} semanas.")
+    return valor
+
+
 def faixa_preco(preco_min, preco_max):
     """Normaliza filtros de faixa de preço (qualquer um pode ser None)."""
     def _num(v):

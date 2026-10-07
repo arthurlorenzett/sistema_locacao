@@ -82,6 +82,65 @@ def realizar_reserva():
         return jsonify({"erro": str(e)}), 400
 
 
+@reserva_bp.route('/recorrente/previa', methods=['GET'])
+@requer_perfil('locatario')
+def previa_recorrente():
+    """Mostra cada data de uma reserva semanal (?espaco_id, data_horario, data_fim, semanas) sem reservar."""
+    try:
+        datas = ReservaFacade.previa_serie(
+            locatario_id=g.usuario.id,
+            espaco_id=request.args.get('espaco_id', type=int),
+            data_horario=request.args.get('data_horario'),
+            data_fim=request.args.get('data_fim'),
+            semanas=request.args.get('semanas', type=int),
+        )
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    livres = [d for d in datas if d["disponivel"]]
+    return jsonify({"datas": datas, "disponiveis": len(livres),
+                    "valor_total": round(sum(d["preco"] for d in livres), 2)}), 200
+
+
+@reserva_bp.route('/recorrente', methods=['POST'])
+@requer_perfil('locatario')
+def realizar_reserva_recorrente():
+    """Mensalista: reserva o mesmo dia/horário por N semanas, já confirmando as datas livres."""
+    dados = request.get_json(silent=True) or {}
+    try:
+        criadas, recusadas, serie_id = ReservaFacade.realizar_serie(
+            locatario_id=g.usuario.id,
+            espaco_id=dados.get('espaco_id'),
+            data_horario=dados.get('data_horario'),
+            data_fim=dados.get('data_fim'),
+            semanas=dados.get('semanas'),
+            metodo_pagamento=dados.get('metodo_pagamento'),
+        )
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
+    if not criadas:
+        return jsonify({"erro": "Nenhuma das datas está disponível.", "recusadas": recusadas}), 400
+    return jsonify({
+        "mensagem": f"{len(criadas)} reserva(s) confirmada(s).",
+        "serie_id": serie_id,
+        "reservas": len(criadas),
+        "recusadas": recusadas,
+        "valor_total": round(sum(r.valor_total for r in criadas), 2),
+    }), 201
+
+
+@reserva_bp.route('/serie/<serie_id>/cancelar', methods=['PUT'])
+@login_obrigatorio
+def cancelar_serie(serie_id):
+    """Cancela, de uma vez, as datas da série que ainda não aconteceram."""
+    primeira = Reserva.query.filter_by(serie_id=serie_id).first()
+    if not primeira:
+        return jsonify({"erro": "Série de reservas não encontrada."}), 404
+    if not _pode_gerenciar(primeira):
+        return jsonify({"erro": "Sem permissão sobre estas reservas."}), 403
+    canceladas = ReservaFacade.cancelar_serie(serie_id)
+    return jsonify({"mensagem": f"{canceladas} reserva(s) cancelada(s).", "canceladas": canceladas}), 200
+
+
 @reserva_bp.route('', methods=['GET'], strict_slashes=False)
 @requer_perfil('locatario')
 def minhas_reservas():

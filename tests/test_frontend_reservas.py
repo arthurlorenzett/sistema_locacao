@@ -36,3 +36,40 @@ def test_total_de_avaliacoes_no_singular_e_plural():
 def test_data_no_formato_brasileiro():
     assert data_br("2026-10-05") == "05/10/2026"
     assert data_br(None) == ""
+
+
+# --- reservas recorrentes (mensalista) ---
+
+from frontend.componentes import linhas_previa_serie, mensagem_serie, resumo_previa_serie  # noqa: E402
+
+
+def _data(dia, livre=True, motivo=None, preco=100.0):
+    return {"inicio": f"2026-10-{dia:02d}T20:00:00", "fim": f"2026-10-{dia:02d}T21:00:00",
+            "disponivel": livre, "motivo": motivo, "preco": preco}
+
+
+def test_linhas_da_previa_mostram_preco_ou_motivo():
+    datas = [_data(6), _data(13, livre=False, motivo="Já existe uma reserva confirmada para este horário.")]
+    assert linhas_previa_serie(datas) == [
+        ("Ter 06/10 · 20:00–21:00 · R$ 100", True),
+        ("Ter 13/10 · 20:00–21:00 — Já existe uma reserva confirmada para este horário.", False),
+    ]
+
+
+def test_resumo_da_previa():
+    assert resumo_previa_serie({"datas": [_data(6), _data(13)], "disponiveis": 2, "valor_total": 200.0}) == \
+        "2 de 2 datas disponíveis · Total R$ 200"
+    assert resumo_previa_serie({"datas": [_data(6), _data(13, livre=False)], "disponiveis": 1, "valor_total": 100.0}) == \
+        "1 de 2 datas disponíveis · Total R$ 100"
+    assert resumo_previa_serie({"datas": [_data(6, livre=False)], "disponiveis": 0, "valor_total": 0}) == \
+        "Nenhuma das datas está disponível."
+
+
+def test_mensagem_depois_de_reservar_a_serie():
+    assert mensagem_serie({"reservas": 4, "recusadas": []}) == "4 reservas confirmadas."
+    assert mensagem_serie({"reservas": 1, "recusadas": []}) == "1 reserva confirmada."
+    assert mensagem_serie({"reservas": 3, "recusadas": [{"inicio": "2026-10-13T20:00:00", "motivo": "x"}]}) == \
+        "3 reservas confirmadas. Ficou de fora: Ter 13/10."
+    fora = [{"inicio": "2026-10-13T20:00:00"}, {"inicio": "2026-10-20T20:00:00"}]
+    assert mensagem_serie({"reservas": 2, "recusadas": fora}) == \
+        "2 reservas confirmadas. Ficaram de fora: Ter 13/10 e Ter 20/10."

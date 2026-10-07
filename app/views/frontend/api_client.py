@@ -154,6 +154,25 @@ def api_reservar(espaco_id, data_horario, data_fim=None):
     })
 
 
+def api_previa_serie(espaco_id, data_horario, data_fim, semanas):
+    """Disponibilidade e preço de cada data de uma reserva semanal (não reserva nada)."""
+    qs = urlencode({"espaco_id": espaco_id, "data_horario": data_horario,
+                    "data_fim": data_fim, "semanas": semanas})
+    return api_get(f"/reservas/recorrente/previa?{qs}")
+
+
+def api_reservar_serie(espaco_id, data_horario, data_fim, semanas, metodo_pagamento):
+    """Mensalista: reserva o mesmo dia/horário por `semanas` semanas, já confirmando."""
+    return api_post("/reservas/recorrente", {
+        "espaco_id": espaco_id, "data_horario": data_horario, "data_fim": data_fim,
+        "semanas": semanas, "metodo_pagamento": metodo_pagamento,
+    })
+
+
+def api_cancelar_serie(serie_id):
+    return api_put(f"/reservas/serie/{serie_id}/cancelar", {})
+
+
 def api_minhas_reservas():
     return api_get("/reservas")
 

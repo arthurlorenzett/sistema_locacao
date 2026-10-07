@@ -116,6 +116,38 @@ def resumo_regras_preco(regras) -> list:
             for r in regras or []]
 
 
+def linhas_previa_serie(datas) -> list:
+    """Uma linha por data da série: (texto, disponível). Livre mostra o preço; ocupada, o motivo."""
+    linhas = []
+    for d in datas or []:
+        quando = agenda.descrever_periodo(d["inicio"], d.get("fim"))
+        if d["disponivel"]:
+            linhas.append((f"{quando} · {moeda(d['preco'])}", True))
+        else:
+            linhas.append((f"{quando} — {d.get('motivo') or 'indisponível'}", False))
+    return linhas
+
+
+def resumo_previa_serie(previa) -> str:
+    total = len(previa.get("datas") or [])
+    livres = previa.get("disponiveis") or 0
+    if not livres:
+        return "Nenhuma das datas está disponível."
+    return f"{livres} de {total} datas disponíveis · Total {moeda(previa.get('valor_total') or 0)}"
+
+
+def mensagem_serie(resposta) -> str:
+    """Mensagem depois de reservar a série, citando as datas que ficaram de fora."""
+    n = resposta.get("reservas") or 0
+    texto = "1 reserva confirmada." if n == 1 else f"{n} reservas confirmadas."
+    fora = [agenda.descrever_periodo(r["inicio"], None).split(" · ")[0] for r in resposta.get("recusadas") or []]
+    if not fora:
+        return texto
+    if len(fora) == 1:
+        return f"{texto} Ficou de fora: {fora[0]}."
+    return f"{texto} Ficaram de fora: {', '.join(fora[:-1])} e {fora[-1]}."
+
+
 def descricao_confianca(confianca):
     """(texto, cor) do índice de comparecimento do cliente, exibido ao locador."""
     if not confianca or confianca.get("percentual") is None:
